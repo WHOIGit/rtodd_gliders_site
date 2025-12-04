@@ -2,7 +2,7 @@
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 
-from names import ControlIds, MapIds, TabsIds, TextIds, IntervalIds, StoreIds
+from names import ControlIds, MapIds, TabsIds, TextIds, IntervalIds, StoreIds, InstrumentsIds
 
 
 def header_row():
@@ -80,11 +80,18 @@ def options_row():
         [
             dbc.CardHeader("Gliders"),
             dbc.CardBody(
-                dcc.Checklist(
+                [dcc.Checklist(
                     id=ControlIds.GLIDER_CHECKLIST,
                     options=[],
                     value=[],
                 ),
+                dbc.Button(
+                    "Refresh file list",
+                    id="refresh-files",
+                    n_clicks=0,
+                    size="sm",
+                    className="mb-2",
+                )],
             ),
         ],
         class_name="mb-3",
@@ -136,29 +143,8 @@ def options_row():
         class_name="mb-3",
     )
 
-    # Column 4: Cast Direction (placeholder)
-    cast_card = dbc.Card(
-        [
-            dbc.CardHeader("Cast Direction"),
-            dbc.CardBody(
-                dcc.RadioItems(
-                    id=ControlIds.CAST_DIR_RADIO,
-                    options=[
-                        {"label": "Up", "value": "up"},
-                        {"label": "Down", "value": "down"},
-                        {"label": "Both", "value": "both"},
-                        {"label": "Unknown", "value": "unknown"},
-                    ],
-                    value="both",
-                    labelStyle={"display": "block"},
-                ),
-                style=disabled_style,
-            ),
-        ],
-        class_name="mb-3",
-    )
 
-    # Column 5: Map Options (placeholder)
+    # Column 4: Map Options (placeholder)
     map_opts_card = dbc.Card(
         [
             dbc.CardHeader("Map Options"),
@@ -183,24 +169,113 @@ def options_row():
             dbc.Col(gliders_card, md=3),
             dbc.Col(color_card, md=2),
             dbc.Col(layers_card, md=3),
-            dbc.Col(cast_card, md=2),
             dbc.Col(map_opts_card, md=2),
         ],
         class_name="mb-2",
     )
 
 
+
+def instruments_tab_layout():
+    # Row 1: selectors (IV, DV, phase filter)
+    selectors_row = dbc.Row(
+        [
+            # Independent Variable
+            dbc.Col(
+                dbc.Card(
+                    [
+                        dbc.CardHeader("Independent Variable"),
+                        dbc.CardBody(
+                            dcc.RadioItems(
+                                id=InstrumentsIds.IV_RADIO,
+                                options=[
+                                    {"label": "Time", "value": "time"},
+                                    {"label": "Depth", "value": "depth"},
+                                ],
+                                value="time",
+                                labelStyle={"display": "block"},
+                            )
+                        ),
+                    ]
+                ),
+                md=3,
+            ),
+
+            # Dependent Variables
+            dbc.Col(
+                dbc.Card(
+                    [
+                        dbc.CardHeader("Dependent Variables"),
+                        dbc.CardBody(
+                            dcc.Dropdown(
+                                id=InstrumentsIds.DV_DROPDOWN,
+                                options=[],   # filled via callback from store_data
+                                value=[],     # list of selected DVs
+                                multi=True,
+                                placeholder="Select variables to plot...",
+                            )
+                        ),
+                    ]
+                ),
+                md=6,
+            ),
+
+            # Phase filter
+            dbc.Col(
+                dbc.Card(
+                    [
+                        dbc.CardHeader("Phase Filter"),
+                        dbc.CardBody(
+                            dcc.RadioItems(
+                                id=InstrumentsIds.PHASE_RADIO,
+                                options=[
+                                    {"label": "Neither (all)", "value": "all"},
+                                    {"label": "Up only", "value": "up"},
+                                    {"label": "Down only", "value": "down"},
+                                ],
+                                value="all",
+                                labelStyle={"display": "block"},
+                            )
+                        ),
+                    ]
+                ),
+                md=3,
+            ),
+        ],
+        class_name="mb-3",
+    )
+
+    # Row 2: plots
+    plots_row = dbc.Row(
+        dbc.Col(
+            html.Div(
+                id=InstrumentsIds.PLOTS,
+                style={"minHeight": "250px", "padding": "10px"},
+            ),
+            width=12,
+        )
+    )
+
+    return html.Div([selectors_row, plots_row])
+
+
+
+
 def tabs_row():
     tabs = dcc.Tabs(
         id=TabsIds.TABS,
-        value=TabsIds.INFO_TAB_VALUE,
+        value=TabsIds.INSTRUMENTS_TAB_VALUE,  # default tab
         children=[
-            dcc.Tab(label="Info", value=TabsIds.INFO_TAB_VALUE),
-            # Data-driven tabs get added here by callback
+            dcc.Tab(label="Instruments", value=TabsIds.INSTRUMENTS_TAB_VALUE),
         ],
     )
 
-    content = html.Div(id=TabsIds.CONTENT, className="mt-3")
+    content = html.Div(
+        instruments_tab_layout(),
+        id=TabsIds.CONTENT,
+        className="mt-3",
+        style={"minHeight": "250px", "padding": "10px"},
+    )
 
     card = dbc.Card(
         [
@@ -223,11 +298,11 @@ def create_layout():
             tabs_row(),        # tabs row
             # Hidden / utility components
             dcc.Store(id=StoreIds.DATA),
-            dcc.Interval(
-                id=IntervalIds.FILE_REFRESH,
-                interval=10_000,  # 10 seconds
-                n_intervals=0,
-            ),
+            # dcc.Interval(
+            #     id=IntervalIds.FILE_REFRESH,
+            #     interval=10_000,  # 10 seconds
+            #     n_intervals=0,
+            # ),
         ],
         fluid=True,
     )

@@ -1,58 +1,162 @@
 # data_loader.py
+import json
+import datetime as dt
 from pathlib import Path
-from typing import List
+from typing import Dict, Any
+from itertools import chain
 
 import pandas as pd
+import logging
 
-DATA_DIR = Path("data")
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
+class GliderDataLoader:
+    def __init__(self, data_dir: Path = Path("data")):
+        self.data_dir = data_dir
+        self.glider_jsons = dict()
+        self.selected_files = []
 
-def list_glider_files() -> List[str]:
-    """Return a sorted list of CSV filenames in DATA_DIR."""
-    if not DATA_DIR.exists():
-        return []
-    return sorted(
-        f.name for f in DATA_DIR.iterdir()
-        if f.is_file() and f.suffix.lower() == ".csv"
-    )
+    @property
+    def files_available(self):
+        if not self.data_dir.exists():
+            return []
+        return sorted(
+            f.name for f in self.data_dir.iterdir()
+            if f.is_file() and f.suffix.lower() == ".json"
+        )
 
+    def set_selected_files(self, filenames: list[str]):
+        self.selected_files = []
+        self.glider_jsons = dict()
+        for filename in filenames:
+            self.load_glider_json(filename)
+            self.selected_files.append(filename)
 
-def load_single_glider(filename: str) -> pd.DataFrame:
-    """Load a single CSV file from DATA_DIR."""
-    path = DATA_DIR / filename
-    if not path.exists():
-        raise FileNotFoundError(path)
-    df = pd.read_csv(path)
-    df["time"] = pd.to_datetime(df["time"], errors="coerce")
-    df["unixtime"] = df["time"].astype("int64") // 10**9  # seconds since epoch
-    df["source"] = filename  # track which glider/file this row came from
-    return df
+    def load_glider_json(self, filename: str, force: bool=False) -> Dict[str, Any]:
+        if filename in self.glider_jsons and not force:
+            return self.glider_jsons[filename]
+        path = self.data_dir / filename
+        with path.open() as f:
+            content = json.load(f)
+        self.glider_jsons[filename] = content
+        return content
 
+    def glider_sns(self):
+        sns = []
+        for filename, glider_json in self.glider_jsons.items():
+            sns.append(glider_json['sn'])
+        return sns
 
-def load_gliders(filenames: List[str]) -> pd.DataFrame:
-    """Load and concatenate multiple glider files."""
-    if not filenames:
-        return pd.DataFrame()
-    frames = [load_single_glider(name) for name in filenames]
-    combined = pd.concat(frames, ignore_index=True)
-    return combined
+    def instruments(self):
+        insts = {}
+        for filename, glider_json in self.glider_jsons.items():
+            sn = glider_json['sn']
+            for inst_key,val in glider_json.items():
+                if isinstance(val, dict) and 'info' in val and 'time' in val:
+                    inst_name = val['info']['tag']
+                    if inst_name not in insts:
+                        insts[inst_name] = dict(gliders=[sn], key=inst_key)
+                    else:
+                        assert insts[inst_name]['key'] == inst_key
+                        insts[inst_name]['gliders'].append(sn)
+        return insts
 
+    def dv_fields(self):
+        fields = {}
+        for filename, glider_json in self.glider_jsons.items():
+            sn = glider_json['sn']
+            for key,val in glider_json.items():
+                if isinstance(val, dict) and 'info' in val:
+                    inst_name = val['info']['tag']
+                    for field_tag, field_name in val['info']['tags'].items():
+                        if field_name == 'time': continue
+                        field_meta = val['info']['fields'][field_name]
+                        inst_field_tag = f"{inst_name}:{field_name}"
+                        if inst_field_tag not in fields:
+                            fields[inst_field_tag] = {sn:field_meta}
+                        else:
+                            fields[inst_field_tag][sn] = field_meta
+        return fields
 
-def get_y_columns(df: pd.DataFrame) -> list:
-    """
-    Return columns suitable for y-axis plots (excluding geo/time/source).
-    For your glider data, this will typically be:
-    depth, temperature, pressure, salinity, ...
-    """
-    if df.empty:
-        return []
-    exclude = {"time", "lat", "lon", "source", "unixtime"}
-    numeric_cols = df.select_dtypes(include="number").columns
-    return [c for c in numeric_cols if c not in exclude]
+    def sn_to_filename(self, glider_sn):
+        for filename, glider_json in self.glider_jsons.items():
+            if glider_sn == glider_json['sn']:
+                return filename
+        raise KeyError(f'glider_sn {glider_sn} not found. Available are: {self.glider_sns()}')
 
+    def filename_to_sn(self, filename):
+        return self.glider_jsons[filename]['sn']
 
-def get_time_bounds(df: pd.DataFrame):
-    """Return (min, max) for 'time', or (0, 1) if missing/empty."""
-    if df.empty or "time" not in df.columns:
-        return 0, 1
-    return df["unixtime"].min(), df["unixtime"].max()
+    def build_glider_df(self, glider_sn):
+        data = self.glider_jsons[self.sn_to_filename(glider_sn)]
+        flat_data = {}
+        for key in ['time','lat','lon']:
+            flat_data[key] = list(chain.from_iterable(data[key]))
+        df = pd.DataFrame(flat_data)
+        df['glider_sn'] = glider_sn
+        return df
+
+    def glider_ndive_t0(self, glider_sn, ndive):
+        data = self.glider_jsons[self.sn_to_filename(glider_sn)]
+        t0 = data['time'][ndive-1][0]
+        return t0
+
+    @staticmethod
+    def pad_emptys(segment_lengths, inst_data, fill_val = 0):
+        padded_block = []
+        for data_block, expected_len in zip(inst_data, segment_lengths):
+            if len(data_block) == expected_len:
+                padded_block.append(data_block)
+            elif len(data_block) == 0:
+                padded_block.append( [fill_val]*expected_len )
+            else:
+                raise ValueError('Will cause flattening error')
+        return padded_block
+
+    def build_instrument_df(self, glider_sn, instrument_name):
+        data = self.glider_jsons[self.sn_to_filename(glider_sn)]
+        instrument_key = self.instruments()[instrument_name]['key']
+        data = data[instrument_key].copy()
+        flat_data = dict(time=[])
+
+        for dive_num,times in zip(data['ndive'],data['time']):
+            #logger.info(f'{glider_sn}, {instrument_name}, {dive_num}/{len(data["time"])}')
+            if dive_num is None: continue
+            ndive_t0 = self.glider_ndive_t0(glider_sn, dive_num)
+            unixtimes = [t+ndive_t0 for t in times]
+            flat_data['time'].extend(unixtimes)
+
+        nested_keys = [k for k in data.keys() if k not in ['info','ndive','time']]
+        segment_lengths = [len(segment) for segment in data['time']]
+
+        flat_data['ndive'] = list(chain.from_iterable(
+            [[dive_num] * seg_len for dive_num, seg_len in zip(data["ndive"], segment_lengths)]
+        ))
+
+        for key in nested_keys:
+            padded = self.pad_emptys( segment_lengths, data[key])
+            flat_data[key] = list(chain.from_iterable( padded ))
+
+        #logger.info(f'{glider_sn}, {instrument_name}: ' + str({key:len(val) for key,val in flat_data.items()}))
+
+        df = pd.DataFrame(flat_data)
+        df['glider_sn'] = glider_sn
+        df['instrument'] = instrument_name
+        return df
+
+    def time_range(self):
+        t_min, t_max = dt.datetime.now().timestamp(), 0
+        for filename,data in self.glider_jsons.items():
+            t_min = min(data['time'][0][0], t_min)
+            t_max = max(data['time'][-1][-1], t_max)
+        if t_max <= t_min:
+            t_max = t_min
+            t_min -= 3600
+        return t_min, t_max
+
+    def instrument_in_glider(self, instrument_name, glider_sn):
+        instrument_key = self.instruments()[instrument_name]['key']
+        if instrument_key in self.glider_jsons[self.sn_to_filename(glider_sn)]:
+            return True
+        return False

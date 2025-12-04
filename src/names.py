@@ -17,6 +17,7 @@ class MapIds:
 
 
 class ControlIds:
+    REFRESH_BTN_ID = "refresh-files"
     GLIDER_CHECKLIST = "glider-checklist"
     MAP_COLOR_RADIO = "map-color-radio"
     LAYERS_RADIO = "layers-radio"
@@ -25,7 +26,20 @@ class ControlIds:
     TIME_RANGE = "time-range-slider"
 
 
+class InstrumentsIds:
+    TAB_VALUE = "tab-instruments"
+
+    IV_RADIO = "instruments-iv-radio"          # Independent variable: time / depth
+    DV_DROPDOWN = "instruments-dv-dropdown"    # Dependent variables (multi)
+    PHASE_RADIO = "instruments-phase-radio"    # Phase filter
+    PLOTS = "instruments-plots"                # Container for plots
+
+
 class TabsIds:
     TABS = "main-tabs"
     CONTENT = "tabs-content"
-    INFO_TAB_VALUE = "tab-info"
+    INSTRUMENTS_TAB_VALUE = InstrumentsIds.TAB_VALUE
+
+
+
+

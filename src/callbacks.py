@@ -1,40 +1,53 @@
 # callbacks.py
 import datetime as dt
+from collections import defaultdict
 
-from dash import Input, Output, State
-from dash import dcc
+from dash import Input, Output, State, dcc
 
-from names import ControlIds, TabsIds, TextIds, IntervalIds, StoreIds
+from names import ControlIds, TabsIds, TextIds, IntervalIds, StoreIds, InstrumentsIds, MapIds
 import data_loader
 from utils import range_slider_marks
 
-def _build_tabs(y_columns):
-    tabs = [dcc.Tab(label="Info", value=TabsIds.INFO_TAB_VALUE)]
-    for col in y_columns:
-        tabs.append(dcc.Tab(label=col, value=f"tab-{col}"))
-    return tabs
-
 
 def register_callbacks(app):
-    # 1) Refresh datafile list and update glider checklist + status text
+
     @app.callback(
         Output(ControlIds.GLIDER_CHECKLIST, "options"),
+        Output(ControlIds.GLIDER_CHECKLIST, "value"),
         Output(TextIds.STATUS, "children"),
-        Input(IntervalIds.FILE_REFRESH, "n_intervals"),
+        Input(ControlIds.REFRESH_BTN_ID, "n_clicks"),
+        #Input(IntervalIds.FILE_REFRESH, "n_intervals"),
         State(ControlIds.GLIDER_CHECKLIST, "value"),
         prevent_initial_call=False,
     )
     def refresh_file_list(n, current_selection):
-        files = data_loader.list_glider_files()
+        gdl = data_loader.GliderDataLoader()
+        files = gdl.files_available  # list of filenames
 
         if not files:
-            return [], [], "No CSV files found in ./data/ (waiting for glider data...)"
+            return [], [], "No .json files found in ./data/"
 
+        # Build options for the checklist
         options = [{"label": f, "value": f} for f in files]
-        # Default to all files selected
-        selection = current_selection or files
-        status = f"Found {len(files)} CSV file(s) in ./data/. Selected: {', '.join(selection)}"
-        return options, status
+
+        # Clean up the current selection: only keep files that still exist
+        current_selection = current_selection or []
+        selection = [f for f in current_selection if f in files]
+
+        # On first load, if nothing is selected, pick the most recently modified file
+        if not selection and n == 0:
+            latest = max(
+                files,
+                key=lambda fn: (gdl.data_dir / fn).stat().st_mtime
+            )
+            selection = [latest]
+
+        status = (
+            f"Found {len(files)} .json file(s) in ./data/. "
+            f"Selected: {', '.join(selection) if selection else 'None'}"
+        )
+
+        return options, selection, status
 
     # 2) When glider selection changes, load data, update time slider + tabs, and store data
     @app.callback(
@@ -43,58 +56,53 @@ def register_callbacks(app):
         Output(ControlIds.TIME_RANGE, "max"),
         Output(ControlIds.TIME_RANGE, "value"),
         Output(ControlIds.TIME_RANGE, "marks"),
-        Output(TabsIds.TABS, "children"),
-        Output(TabsIds.TABS, "value"),
         Input(ControlIds.GLIDER_CHECKLIST, "value"),
         State(ControlIds.TIME_RANGE, "min"),
         State(ControlIds.TIME_RANGE, "max"),
         State(ControlIds.TIME_RANGE, "value"),
-        State(TabsIds.TABS, "value"),
         prevent_initial_call=True,
     )
-    def load_data_and_update_layout(selected_files, current_min, current_max, current_range, current_tab):
+    def load_data_and_update_layout(selected_files, current_min, current_max, current_range):
         # No gliders selected → clear
         if not selected_files:
-            empty_tabs = _build_tabs([])
+            empty_tabs = [dcc.Tab(label="Instruments", value=TabsIds.INSTRUMENTS_TAB_VALUE)]
             return (
                 None,
                 0,
                 1,
                 [0, 1],
                 {0: "0", 1: "1"},
-                empty_tabs,
-                TabsIds.INFO_TAB_VALUE,
             )
 
-        df = data_loader.load_gliders(selected_files)
-        if df.empty:
-            empty_tabs = _build_tabs([])
-            return (
-                None,
-                0,
-                1,
-                [0, 1],
-                {0: "0", 1: "1"},
-                empty_tabs,
-                TabsIds.INFO_TAB_VALUE,
-            )
+        gdl = data_loader.GliderDataLoader()
+        gdl.set_selected_files(selected_files)
 
-        # Use UNIxtime for slider bounds
-        t_min = int(df["unixtime"].min())
-        t_max = int(df["unixtime"].max())
-        if t_min == t_max:
-            t_min, t_max = t_min - 1, t_max + 1
+        store_data = dict(latlon_dfs={}, instrument_dfs=defaultdict(dict), dv_fields={})
+        inst_names = set()
+
+        # Dependent variable metadata
+        for inst_field_tag,field_meta in gdl.dv_fields().items():
+            store_data['dv_fields'][inst_field_tag] = field_meta
+            inst_name = inst_field_tag.split(':')[0]
+            inst_names.add(inst_name)
+
+        # Dataframes per glider and per instrument
+        for glider_sn in gdl.glider_sns():
+            df_latlon = gdl.build_glider_df(glider_sn)
+            store_data['latlon_dfs'][glider_sn] = df_latlon.to_dict('records')
+
+            # per-instrument dfs for plots
+            for inst_name in gdl.instruments():
+                if gdl.instrument_in_glider(inst_name, glider_sn):
+                    df = gdl.build_instrument_df(glider_sn, inst_name)
+                    store_data['instrument_dfs'][glider_sn][inst_name] = df.to_dict('records')
+
+
+        # Use Unixtime for slider bounds
+        t_min, t_max = gdl.time_range()
 
         # Build tick marks from unixtime
-        import datetime as dt
-        steps = 7
-        marks = {}
-        delta = (t_max - t_min) / steps
-        for i in range(steps + 1):
-            tick = int(t_min + i * delta)
-            ts = dt.datetime.utcfromtimestamp(tick)
-            label = ts.strftime("%Y-%m-%d\n%H:%M")
-            marks[tick] = label
+        marks = range_slider_marks(t_min, t_max)
 
         # Decide what slider value to use
         if (
@@ -110,31 +118,12 @@ def register_callbacks(app):
             # Bounds changed → reset to full extent
             slider_value = [t_min, t_max]
 
-        # Build tabs from available y-columns
-        y_cols = data_loader.get_y_columns(df)
-        tabs = _build_tabs(y_cols)
-
-        store_data = {
-            "data": df.to_dict("records"),
-            "columns": list(df.columns),
-            "y_columns": y_cols,
-        }
-
-        # Valid tab values: "Info" + one tab per y-column
-        valid_tab_values = [TabsIds.INFO_TAB_VALUE] + [f"tab-{col}" for col in y_cols]
-
-        # Use current_tab if it exists and is still valid, otherwise fall back to "Info"
-        active_tab = current_tab if current_tab in valid_tab_values else TabsIds.INFO_TAB_VALUE
-
-
         return (
             store_data,
             t_min,
             t_max,
             slider_value,
             marks,
-            tabs,
-            active_tab,
         )
 
     # 3) Update time range readout text
@@ -149,3 +138,30 @@ def register_callbacks(app):
         start = dt.datetime.fromtimestamp(start).strftime("%Y-%m-%d %H:%M")
         end = dt.datetime.fromtimestamp(end).strftime("%Y-%m-%d %H:%M")
         return f"Time range: {start} – {end}"
+
+
+
+    @app.callback(
+        Output(InstrumentsIds.DV_DROPDOWN, "options"),
+        Output(InstrumentsIds.DV_DROPDOWN, "value"),
+        Input(StoreIds.DATA, "data"),
+    )
+    def update_dv_options(store_data):
+        if not store_data or "dv_fields" not in store_data:
+            return [], []
+
+        options = []
+        for key, field_meta in store_data['dv_fields'].items():
+            inst_name,field_id = key.split(':',1)
+            sns = list(field_meta.keys())
+            sn0 = sns[0]
+            short_name = field_meta[sn0].get("short_name")
+            units = field_meta[sn0].get("units")
+            comment = field_meta[sn0].get('comment')
+            label = f"{key} ({','.join(sns)})"
+            if short_name: label = f'{label} "{short_name}"'
+            if units: label = f'{label} [{units}]'
+            if comment: label = f'{label} - {comment}'
+            options.append(dict(label=label, value=key))
+
+        return options, []

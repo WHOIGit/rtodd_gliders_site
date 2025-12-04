@@ -1,140 +1,288 @@
 # plots.py
 from dash import Input, Output, dcc, html
+import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
-from names import ControlIds, MapIds, TabsIds, StoreIds
+from names import ControlIds, MapIds, TabsIds, StoreIds, InstrumentsIds
 
+PHASE_UP = 0
+PHASE_DOWN = 1
 
-def _df_from_store(store_data):
-    if not store_data or "data" not in store_data:
-        return pd.DataFrame()
-    df = pd.DataFrame(store_data["data"])
-    if 'time' in df.columns:
-        df['time'] = pd.to_datetime(df['time'], errors='coerce')
-    return df
+def _get_filtered_dfs_for_dv(instrument_dfs, dv, time_range, phase_filter):
+    """
+    For a DV like 'CTD:t', return:
+      inst_name, field_name, entries
+    where entries is a list of dicts:
+      { "glider_sn": ..., "df": filtered_df, "depth_col": depth_col or None }
 
+    This applies:
+      - time_range filter (if 'time' exists)
+      - phase filter (if 'phase' exists)
+      - chooses depth_col ('depth' or 'p') when present
+      - ensures field_name is in df
+    """
+    try:
+        inst_name, field_name = dv.split(":", 1)
+    except ValueError:
+        return None, None, []
 
-def register_plot_callbacks(app):
-    # Map callback: responds to data, time range, and color selection
-    @app.callback(
-        Output(MapIds.GRAPH, "figure"),
-        Input(StoreIds.DATA, "data"),
-        Input(ControlIds.TIME_RANGE, "value"),
-        Input(ControlIds.MAP_COLOR_RADIO, "value"),
-    )
-    def update_map(store_data, time_range, color_choice):
-        df = _df_from_store(store_data)
+    entries = []
 
-        # Empty or missing columns -> blank map
-        if df.empty or "lat" not in df.columns or "lon" not in df.columns:
-            blank = px.scatter_mapbox(
-                pd.DataFrame({"lat": [0], "lon": [0]}),
-                lat="lat",
-                lon="lon",
-                zoom=1,
-            )
-            blank.update_traces(marker={"opacity": 0})
-            blank.update_layout(
-                mapbox_style="open-street-map",
-                margin=dict(l=0, r=0, t=0, b=0),
-            )
-            return blank
+    for glider_sn, inst_map in instrument_dfs.items():
+        records = inst_map.get(inst_name)
+        if not records:
+            continue
 
-        # Filter by time range if possible
-        if time_range and "unixtime" in df.columns:
-            start,end = time_range
-            timerange_mask = (df["unixtime"] >= start) & (df["unixtime"] <= end)
-            df = df[timerange_mask]
-
+        df = pd.DataFrame(records)
         if df.empty:
-            blank = px.scatter_mapbox(
-                pd.DataFrame({"lat": [0], "lon": [0]}),
-                lat="lat",
-                lon="lon",
-                zoom=1,
-            )
-            blank.update_traces(marker={"opacity": 0})
-            blank.update_layout(
-                mapbox_style="open-street-map",
-                margin=dict(l=0, r=0, t=0, b=0),
-            )
-            return blank
+            continue
 
-        fig = px.scatter_mapbox(
-            df,
-            lat="lat",
-            lon="lon",
-            hover_data=[c for c in df.columns if c not in {"lat", "lon"}],
-            zoom=4,
+        # Time filter (unixtime) if slider + 'time' column
+        if time_range and "time" in df.columns:
+            start, end = time_range
+            df = df[(df["time"] >= start) & (df["time"] <= end)]
+            if df.empty:
+                continue
+
+        # Phase filter
+        if phase_filter != "all" and "phase" in df.columns:
+            if phase_filter == "up":
+                df = df[df["phase"] == PHASE_UP]
+            elif phase_filter == "down":
+                df = df[df["phase"] == PHASE_DOWN]
+            if df.empty:
+                continue
+
+        # Depth column (only needed for depth plots, but we can discover it here)
+        depth_col = None
+        if "depth" in df.columns:
+            depth_col = "depth"
+        elif "p" in df.columns:
+            depth_col = "p"
+
+        # Must have the requested field
+        if field_name not in df.columns:
+            continue
+
+        entries.append(
+            {
+                "glider_sn": glider_sn,
+                "df": df,
+                "depth_col": depth_col,
+            }
         )
 
-        # Apply color choice as marker color
-        color_choice = color_choice or "red"
-        fig.update_traces(marker={"color": color_choice})
+    return inst_name, field_name, entries
 
-        fig.update_layout(
-            mapbox_style="open-street-map",
-            margin=dict(l=0, r=0, t=0, b=0),
-        )
-        return fig
 
-    # Tab content callback: render Info tab and y-column tabs
+def register_instrument_plots(app):
     @app.callback(
-        Output(TabsIds.CONTENT, "children"),
-        Input(TabsIds.TABS, "value"),
+        Output(InstrumentsIds.PLOTS, "children"),
         Input(StoreIds.DATA, "data"),
+        Input(InstrumentsIds.IV_RADIO, "value"),
+        Input(InstrumentsIds.DV_DROPDOWN, "value"),
+        Input(InstrumentsIds.PHASE_RADIO, "value"),
         Input(ControlIds.TIME_RANGE, "value"),
     )
-    def render_tab(active_tab, store_data, time_range):
-        df = _df_from_store(store_data)
+    def update_instrument_plots(store_data, iv, dv_values, phase_filter, time_range):
+        if not store_data or not dv_values:
+            return html.Div("No instrument variables selected.", style={"color": "#666"})
 
-        # Info tab
-        if active_tab == TabsIds.INFO_TAB_VALUE:
-            if df.empty:
-                return "No data loaded yet."
-            n_points = len(df)
-            sources = sorted(df["source"].unique()) if "source" in df.columns else []
-            return html.Div(
-                [
-                    html.H5("Deployment Information"),
-                    html.P(f"Loaded {n_points} data point(s)."),
-                    html.P(f"Sources: {', '.join(sources) if sources else 'Unknown'}."),
-                ],
-                style={
-                    "minHeight": "500px",
-                    "padding": "10px",
-                },
+        instrument_dfs = store_data.get("instrument_dfs", {})
+        if not instrument_dfs:
+            return html.Div("No instrument data available.", style={"color": "#666"})
+
+        plots = []
+
+        # Precompute filtered entries for each DV once
+        dv_results = {}  # dv -> (inst_name, field_name, entries)
+        for dv in dv_values:
+            inst_name, field_name, entries = _get_filtered_dfs_for_dv(
+                instrument_dfs, dv, time_range, phase_filter
             )
+            dv_results[dv] = (inst_name, field_name, entries)
 
-        # Filter by time for plots
-        if not df.empty and time_range and "unixtime" in df.columns:
-            start, end = time_range
-            timerange_mask = (df["unixtime"] >= start) & (df["unixtime"] <= end)
-            df = df[timerange_mask]
+        # -----------------
+        # IV = time: stack plots vertically
+        # -----------------
+        if iv == "time":
+            for dv in dv_values:
+                inst_name, field_name, entries = dv_results.get(dv, (None, None, []))
+                if not inst_name or not entries:
+                    plots.append(
+                        dbc.Row(
+                            dbc.Col(
+                                html.Div(
+                                    f"No data for {dv} with current IV/phase selection.",
+                                    style={"color": "#666"},
+                                ),
+                                width=12,
+                            ),
+                            class_name="mb-3",
+                        )
+                    )
+                    continue
 
-        if not active_tab or not active_tab.startswith("tab-"):
-            return "No plot available."
+                fig = go.Figure()
+                any_trace = False
 
-        y_col = active_tab.replace("tab-", "", 1)
-        if df.empty or y_col not in df.columns:
-            return f"No data available for {y_col}."
+                for entry in entries:
+                    glider_sn = entry["glider_sn"]
+                    df = entry["df"]
 
-        # Example: time vs selected variable
-        if "time" in df.columns:
-            x_col = "time"
-        else:
-            # Fallback to index
-            df = df.reset_index().rename(columns={"index": "index"})
-            x_col = "index"
+                    # need 'time' column here
+                    if "time" not in df.columns:
+                        continue
 
-        fig = px.line(
-            df.sort_values(x_col),
-            x=x_col,
-            y=y_col,
-            color="source" if "source" in df.columns else None,
-            markers=True,
-            title=f"{y_col} vs {x_col}",
-        )
+                    df_sorted = df.sort_values("time")
+                    time_dt = pd.to_datetime(df_sorted["time"], unit="s")
 
-        return dcc.Graph(figure=fig)
+                    fig.add_trace(
+                        go.Scatter(
+                            x=time_dt,
+                            y=df_sorted[field_name],
+                            mode="lines",
+                            name=f"SN {glider_sn}",
+                        )
+                    )
+                    any_trace = True
+
+                if not any_trace:
+                    plots.append(
+                        dbc.Row(
+                            dbc.Col(
+                                html.Div(
+                                    f"No data for {dv} with current IV/phase selection.",
+                                    style={"color": "#666"},
+                                ),
+                                width=12,
+                            ),
+                            class_name="mb-3",
+                        )
+                    )
+                else:
+                    fig.update_layout(
+                        xaxis_title="Time",
+                        yaxis_title=field_name,
+                        title=f"{inst_name.upper()} – {field_name} vs time",
+                    )
+                    plots.append(
+                        dbc.Row(
+                            dbc.Col(
+                                dcc.Graph(figure=fig),
+                                width=12,
+                            ),
+                            class_name="mb-3",
+                        )
+                    )
+
+        # -----------------
+        # IV = depth: plots side-by-side, tall & skinny, shared y range
+        # -----------------
+        elif iv == "depth":
+            # First: compute global max depth across all DVs / gliders
+            depth_max = None
+            for dv in dv_values:
+                inst_name, field_name, entries = dv_results.get(dv, (None, None, []))
+                if not inst_name or not entries:
+                    continue
+                for entry in entries:
+                    df = entry["df"]
+                    depth_col = entry["depth_col"]
+                    if not depth_col or depth_col not in df.columns:
+                        continue
+                    dmax = df[depth_col].max()
+                    if depth_max is None or dmax > depth_max:
+                        depth_max = dmax
+
+            if depth_max is None:
+                depth_max = 1.0
+
+            # Second: build one fig per DV and lay them out horizontally
+            row_children = []
+
+            for dv in dv_values:
+                inst_name, field_name, entries = dv_results.get(dv, (None, None, []))
+                if not inst_name or not entries:
+                    row_children.append(
+                        dbc.Col(
+                            html.Div(
+                                f"No data for {dv} with current IV/phase selection.",
+                                style={"color": "#666"},
+                            ),
+                            md=4,
+                        )
+                    )
+                    continue
+
+                fig = go.Figure()
+                any_trace = False
+                depth_col_used = None
+
+                for entry in entries:
+                    glider_sn = entry["glider_sn"]
+                    df = entry["df"]
+                    depth_col = entry["depth_col"]
+
+                    if not depth_col or depth_col not in df.columns:
+                        continue
+
+                    if field_name not in df.columns:
+                        continue
+
+                    fig.add_trace(
+                        go.Scatter(
+                            x=df[field_name],
+                            y=df[depth_col],
+                            mode="markers",
+                            name=f"SN {glider_sn}",
+                        )
+                    )
+                    depth_col_used = depth_col
+                    any_trace = True
+
+                if not any_trace:
+                    row_children.append(
+                        dbc.Col(
+                            html.Div(
+                                f"No data for {dv} with current IV/phase selection.",
+                                style={"color": "#666"},
+                            ),
+                            md=4,
+                        )
+                    )
+                else:
+                    fig.update_layout(
+                        xaxis_title=field_name,
+                        yaxis_title=depth_col_used or "depth",
+                        title=f"{inst_name.upper()} – {field_name} vs {depth_col_used or 'depth'}",
+                    )
+                    # shared depth axis, depth increases downward
+                    fig.update_yaxes(range=[depth_max, 0])
+
+                    row_children.append(
+                        dbc.Col(
+                            dcc.Graph(figure=fig, style={"height": "800px"}),  # tall & skinny
+                            md=2,  # tweak to control how many per row
+                        )
+                    )
+
+            if not row_children:
+                plots.append(
+                    dbc.Row(
+                        dbc.Col(
+                            html.Div("No depth plots available.", style={"color": "#666"}),
+                            width=12,
+                        ),
+                        class_name="mb-3",
+                    )
+                )
+            else:
+                plots.append(dbc.Row(row_children, class_name="mb-3"))
+
+        if not plots:
+            return html.Div("No plots to display with current settings.", style={"color": "#666"})
+
+        return plots
