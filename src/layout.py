@@ -1,52 +1,61 @@
 # layout.py
+import dash
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 
-from names import ControlIds, MapIds, TabsIds, TextIds, IntervalIds, StoreIds, InstrumentsIds
+from names import *
 
-
-def header_row():
-    return dbc.Row(
-        dbc.Col(
-            html.H2("Glider Data Explorer", className="my-2"),
-            width=12,
+def make_navbar() -> dbc.Navbar:
+    """
+    Top navigation bar. It iterates over Dash's page registry
+    and builds links for each registered page.
+    """
+    pullout_btn = html.Div(
+        dbc.Button(
+            "Sidebar >>",
+            id="open-drawer",
+            n_clicks=0,
+            color="secondary",
+            size="sm",
         ),
-        class_name="mb-2",
     )
 
-
-def status_row():
-    return dbc.Row(
-        dbc.Col(
-            dbc.Alert(
-                id=TextIds.STATUS,
-                children="Waiting for data files in ./data/ ...",
-                color="info",
-                class_name="mb-2",
-            ),
-            width=12,
-        )
-    )
-
-
-def map_row():
-    card = dbc.Card(
-        [
-            dbc.CardHeader("Map"),
-            dbc.CardBody(
-                dcc.Graph(
-                    id=MapIds.GRAPH,
-                    style={"height": "450px"},
-                    config={"displayModeBar": True},
+    nav_items = [dbc.NavbarBrand("GliderApp", href="/")]
+    for page in dash.page_registry.values():
+        # You can add conditions here to hide certain pages from the navbar
+        # e.g., if page.get("name") == "NotShown": continue
+        nav_items.append(
+            dbc.NavItem(
+                dbc.NavLink(
+                    page["name"],
+                    href=page["path"],
+                    active="exact",
                 )
-            ),
-        ],
-        class_name="mb-3",
+            )
+        )
+
+    navbar = dbc.Navbar(
+        dbc.Container(
+            [
+                # Left side: Brand
+                pullout_btn,
+
+                # Right side: Links
+                dbc.Nav(
+                    nav_items,
+                    className="ms-auto",  # push nav items to the right
+                    navbar=True,
+                ),
+            ],
+            fluid=True,
+        ),
+        className="mb-0",
     )
-    return dbc.Row(dbc.Col(card, width=12))
+
+    return navbar
 
 
-def time_slider_row():
+def time_slider_card():
     card = dbc.Card(
         [
             dbc.CardHeader("Time Range"),
@@ -62,7 +71,7 @@ def time_slider_row():
                         tooltip={"placement": "bottom", "always_visible": False},
                     ),
                     html.Div(
-                        id="time-range-readout",
+                        id=TextIds.TIMERANGE_READOUT,
                         className="mt-2 text-muted",
                         style={"fontSize": "0.85rem"},
                     ),
@@ -71,238 +80,79 @@ def time_slider_row():
         ],
         class_name="mb-3",
     )
-    return dbc.Row(dbc.Col(card, width=12))
+    return card
 
-
-def options_row():
-    # Column 1: Gliders (checkboxes)
-    gliders_card = dbc.Card(
+def gliders_card():
+    card = dbc.Card(
         [
             dbc.CardHeader("Gliders"),
-            dbc.CardBody(
-                [dcc.Checklist(
+            dbc.CardBody([
+                dcc.Checklist(
                     id=ControlIds.GLIDER_CHECKLIST,
                     options=[],
                     value=[],
                 ),
                 dbc.Button(
                     "Refresh file list",
-                    id="refresh-files",
+                    id=ControlIds.REFRESH_BTN_ID,
                     n_clicks=0,
                     size="sm",
                     className="mb-2",
-                )],
-            ),
-        ],
-        class_name="mb-3",
-    )
-
-    # Column 2: Map Color Variable
-    color_card = dbc.Card(
-        [
-            dbc.CardHeader("Map Color Variable"),
-            dbc.CardBody(
-                dcc.RadioItems(
-                    id=ControlIds.MAP_COLOR_RADIO,
-                    options=[
-                        {"label": "Red", "value": "red"},
-                        {"label": "Green", "value": "green"},
-                        {"label": "Blue",  "value": "blue"},
-                    ],
-                    value="red",
-                    labelStyle={"display": "block"},
-                )
-            ),
-        ],
-        class_name="mb-3",
-    )
-
-    # Disabled helper style
-    disabled_style = {
-        "opacity": "0.4",
-        "pointerEvents": "none",
-    }
-
-    # Column 3: Layers (placeholder)
-    layers_card = dbc.Card(
-        [
-            dbc.CardHeader("Layers"),
-            dbc.CardBody(
-                dcc.RadioItems(
-                    id=ControlIds.LAYERS_RADIO,
-                    options=[
-                        {"label": "Mixed Layer Depth Avg", "value": "mld_avg"},
-                        {"label": "Surface", "value": "surface"},
-                    ],
-                    value="mld_avg",
-                    labelStyle={"display": "block"},
                 ),
-                style=disabled_style,
-            ),
+                dbc.Alert(
+                    id=TextIds.STATUS,
+                    children="Waiting for data files in ./data/ ...",
+                    color="info",
+                    class_name="mb-0",
+                ),
+            ]),
         ],
         class_name="mb-3",
     )
+    return card
 
 
-    # Column 4: Map Options (placeholder)
-    map_opts_card = dbc.Card(
-        [
-            dbc.CardHeader("Map Options"),
-            dbc.CardBody(
-                dcc.RadioItems(
-                    id=ControlIds.MAP_OPTIONS_RADIO,
-                    options=[
-                        {"label": "Option 1", "value": "opt1"},
-                        {"label": "Option 2", "value": "opt2"},
-                    ],
-                    value="opt1",
-                    labelStyle={"display": "block"},
-                ),
-                style=disabled_style,
-            ),
-        ],
-        class_name="mb-3",
+def left_pullout(content):
+    # The pullout panel itself
+    pullout_panel = dbc.Offcanvas(
+        children=content,
+        id=DivIds.LEFT_DRAWER,
+        title="Sidebar",
+        is_open=False,
+        placement="start",  # slide from the left
+        backdrop=False,  # don't dim / block the rest of the screen
+        scrollable=True,
     )
-
-    return dbc.Row(
-        [
-            dbc.Col(gliders_card, md=3),
-            dbc.Col(color_card, md=2),
-            dbc.Col(layers_card, md=3),
-            dbc.Col(map_opts_card, md=2),
-        ],
-        class_name="mb-2",
-    )
-
-
-
-def instruments_tab_layout():
-    # Row 1: selectors (IV, DV, phase filter)
-    selectors_row = dbc.Row(
-        [
-            # Independent Variable
-            dbc.Col(
-                dbc.Card(
-                    [
-                        dbc.CardHeader("Independent Variable"),
-                        dbc.CardBody(
-                            dcc.RadioItems(
-                                id=InstrumentsIds.IV_RADIO,
-                                options=[
-                                    {"label": "Time", "value": "time"},
-                                    {"label": "Depth", "value": "depth"},
-                                ],
-                                value="time",
-                                labelStyle={"display": "block"},
-                            )
-                        ),
-                    ]
-                ),
-                md=3,
-            ),
-
-            # Dependent Variables
-            dbc.Col(
-                dbc.Card(
-                    [
-                        dbc.CardHeader("Dependent Variables"),
-                        dbc.CardBody(
-                            dcc.Dropdown(
-                                id=InstrumentsIds.DV_DROPDOWN,
-                                options=[],   # filled via callback from store_data
-                                value=[],     # list of selected DVs
-                                multi=True,
-                                placeholder="Select variables to plot...",
-                            )
-                        ),
-                    ]
-                ),
-                md=6,
-            ),
-
-            # Phase filter
-            dbc.Col(
-                dbc.Card(
-                    [
-                        dbc.CardHeader("Phase Filter"),
-                        dbc.CardBody(
-                            dcc.RadioItems(
-                                id=InstrumentsIds.PHASE_RADIO,
-                                options=[
-                                    {"label": "Neither (all)", "value": "all"},
-                                    {"label": "Up only", "value": "up"},
-                                    {"label": "Down only", "value": "down"},
-                                ],
-                                value="all",
-                                labelStyle={"display": "block"},
-                            )
-                        ),
-                    ]
-                ),
-                md=3,
-            ),
-        ],
-        class_name="mb-3",
-    )
-
-    # Row 2: plots
-    plots_row = dbc.Row(
-        dbc.Col(
-            html.Div(
-                id=InstrumentsIds.PLOTS,
-                style={"minHeight": "250px", "padding": "10px"},
-            ),
-            width=12,
-        )
-    )
-
-    return html.Div([selectors_row, plots_row])
-
-
-
-
-def tabs_row():
-    tabs = dcc.Tabs(
-        id=TabsIds.TABS,
-        value=TabsIds.INSTRUMENTS_TAB_VALUE,  # default tab
-        children=[
-            dcc.Tab(label="Instruments", value=TabsIds.INSTRUMENTS_TAB_VALUE),
-        ],
-    )
-
-    content = html.Div(
-        instruments_tab_layout(),
-        id=TabsIds.CONTENT,
-        className="mt-3",
-        style={"minHeight": "250px", "padding": "10px"},
-    )
-
-    card = dbc.Card(
-        [
-            dbc.CardHeader("Plots"),
-            dbc.CardBody([tabs, content]),
-        ],
-        class_name="mb-3",
-    )
-    return dbc.Row(dbc.Col(card, width=12))
+    return pullout_panel
 
 
 def create_layout():
-    return dbc.Container(
+    # instead of dash.page_container, we create our own container with flex-column and w-100
+    pages_container = html.Div(
         [
-            header_row(),
-            status_row(),      # updatable text row
-            map_row(),         # map row
-            time_slider_row(), # time range slider row
-            options_row(),     # options row with 5 columns
-            tabs_row(),        # tabs row
-            # Hidden / utility components
+            dcc.Location(id=dash.dash._ID_LOCATION, refresh="callback-nav"),
+            html.Div(id=dash.dash._ID_CONTENT, disable_n_clicks=True,
+                     className="flex-grow-1 d-flex flex-column w-100",),
+            dcc.Store(id=dash.dash._ID_STORE),
+            html.Div(id=dash.dash._ID_DUMMY, disable_n_clicks=True),
+        ],
+        className="flex-grow-1 d-flex flex-column w-100",
+        style={"minHeight": 0}
+    )
+
+    layout = dbc.Container(
+        [
             dcc.Store(id=StoreIds.DATA),
-            # dcc.Interval(
-            #     id=IntervalIds.FILE_REFRESH,
-            #     interval=10_000,  # 10 seconds
-            #     n_intervals=0,
-            # ),
+            make_navbar(),
+            left_pullout([
+                html.H5("Controls"),
+                gliders_card(),
+                time_slider_card(),
+            ]),
+            pages_container,
+
         ],
         fluid=True,
+        className="p-0 d-flex flex-column vh-100",
     )
+    return layout
