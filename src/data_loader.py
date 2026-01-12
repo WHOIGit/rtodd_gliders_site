@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, Any
 from itertools import chain
 
+import numpy as np
 import pandas as pd
 import logging
 
@@ -93,6 +94,8 @@ class GliderDataLoader:
         flat_data = {}
         for key in ['time','lat','lon']:
             flat_data[key] = list(chain.from_iterable(data[key]))
+        for key in ['u','v']:
+            flat_data[key] = list(chain.from_iterable([(np.nan,k) for k in data[key]]))
         df = pd.DataFrame(flat_data)
         df['glider_sn'] = glider_sn
         return df

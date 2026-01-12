@@ -10,6 +10,7 @@ def map_row():
         id=MapIds.GRAPH,
         style={"height": "100%", "width": "100%"},
         config={"displayModeBar": True},
+        responsive=True,
     ),
     className="flex-grow-1 d-flex",
     style={"minHeight": 0},
