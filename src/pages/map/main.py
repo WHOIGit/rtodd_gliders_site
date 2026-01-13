@@ -1,3 +1,5 @@
+from itertools import cycle
+
 import dash
 from dash import Input, Output, State, dcc
 import numpy as np
@@ -13,8 +15,8 @@ from .names import *
 # Register this file as a Dash "page"
 dash.register_page(
     __name__,
-    path="/map2",          # URL path
-    name="Map2",          # Text shown in navbar (via page["name"])
+    path="/",          # URL path
+    name="Map",          # Text shown in navbar (via page["name"])
     title="GliderApp - Map2", # <title> of the browser tab
 )
 
@@ -30,7 +32,6 @@ map_fig_common_layout_kwargs = dict(
             "https://services.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}"
         ])],
 )
-
 
 def blank_map():
     fig = go.Figure()
@@ -49,11 +50,31 @@ def update_map(store_data, time_range):
     if not latlon_dfs:
         return blank_map()
 
-    color_choice = "red" #color_choice or "red"
+    COLOR_CYCLE = cycle([
+        "#1f77b4",  # blue
+        "#ff7f0e",  # orange
+        "#2ca02c",  # green
+        "#d62728",  # red
+        "#9467bd",  # purple
+        "#8c564b",  # brown
+    ])
+    opacity = 0.6
+    COLOR_CYCLE_RGBA = cycle([
+        f"rgba(31, 119, 180, {opacity})",  # blue
+        f"rgba(255, 127, 14, {opacity})",  # orange
+        f"rgba(44, 160, 44, {opacity})",  # green
+        f"rgba(214, 39, 40, {opacity})",  # red
+        f"rgba(148, 103, 189, {opacity})",  # purple
+        f"rgba(140, 86, 75, {opacity})",  # brown
+    ])
 
     fig = go.Figure()
     maxlat, minlat, maxlon, minlon = -180,180,-180,180
     for glider_sn, records in latlon_dfs.items():
+        color = next(COLOR_CYCLE)
+        color_rgba = next(COLOR_CYCLE_RGBA)
+        legendgroup = f"SN {glider_sn}"
+
         df = pd.DataFrame(records)
         if df.empty or not {"lat", "lon"}.issubset(df.columns):
             continue
@@ -72,64 +93,76 @@ def update_map(store_data, time_range):
         minlon = min(minlon, float(df["lon"].min()))
         maxlon = max(maxlon, float(df["lon"].max()))
 
+        df['datetimestr'] = pd.to_datetime(df.time, unit='s').dt.strftime('%Y-%m-%d %H:%M:%S')
+        customdata = [[glider_sn, datestr.split()[0], datestr.split()[1]] for datestr in df.datetimestr]
+
         # add trace for this glider
         fig.add_trace(go.Scattermap(
             lat=df["lat"],
             lon=df["lon"],
             mode="markers+lines",
             name=f"SN {glider_sn}",
-            marker=dict(size=6, color=color_choice),
-            line=dict(width=2, color=color_choice),
+            legendgroup = legendgroup,
+            marker=dict(size=6, color=color),
+            line=dict(width=3, color=color),
             hovertemplate=(
                 "<b>Glider %{customdata[0]}</b><br>"
                 "Lat: %{lat}<br>"
-                "Lon: %{lon}<extra></extra>"
+                "Lon: %{lon}<br>"
+                "Date: %{customdata[1]}<br>"
+                "Time: %{customdata[2]}"
+                "<extra></extra>"
             ),
-            customdata=[[glider_sn]]*len(df),
+            customdata=customdata,
         ))
 
         # add u,v vectors if available
         if {"u", "v"}.issubset(df.columns):
+            SCALE_FACTOR = 0.4
             df_uv = df.dropna()
             vlats, ulons = [], []
             for index, row in df_uv.iterrows():
                 lat, lon = row["lat"], row["lon"]
-                ulon, vlat = lon + row["u"], lat + row["v"]
+                ulon, vlat = lon + row["u"]*SCALE_FACTOR, lat + row["v"]*SCALE_FACTOR
                 ulons += [lon, ulon, None]
                 vlats += [lat, vlat, None]
             fig.add_trace(go.Scattermap(
                 lat=vlats,
                 lon=ulons,
                 name=f"SN {glider_sn} UV",
-                #showlegend=False,
+                legendgroup=legendgroup,
+                showlegend=False,
                 hoverinfo="skip",
                 mode="lines",
-                line=dict(width=2, color='green'),
+                line=dict(width=1, color=color_rgba), # argh, no OPACITY
             ))
 
         # image at end of trace
         lat_end = df["lat"].iloc[-1]
         lon_end = df["lon"].iloc[-1]
-
         fig.add_trace(go.Scattermap(
             lat=[lat_end],
             lon=[lon_end],
+            name=f"SN {glider_sn} Endpoint",
             mode="markers",
             marker=dict(
                 size=30,
                 symbol="star",
-                color="red",
+                color=color,
             ),
-            name=f"SN {glider_sn} Endpoint",
-            #showlegend=False,
+            legendgroup = legendgroup,
+            showlegend=False,
             hovertemplate=(
                 "<b>Glider %{customdata[0]}</b><br>"
                 "Lat: %{lat}<br>"
-                "Lon: %{lon}<extra></extra>"
+                "Lon: %{lon}<br>"
+                "Date: %{customdata[1]}<br>"
+                "Time: %{customdata[2]}"
+                "<extra></extra>"
             ),
-            customdata=[[glider_sn]],
+            customdata=[customdata[-1]]
         ))
-        print(lat_end,lon_end)
+
     if not fig.data:
         return blank_map()
 

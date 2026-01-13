@@ -4,7 +4,7 @@ import datetime as dt
 from collections import defaultdict
 
 import dash
-from dash import dcc, Input, Output, State
+from dash import dcc, Input, Output, State, no_update, ctx
 import dash_bootstrap_components as dbc
 
 from layout import create_layout
@@ -113,7 +113,7 @@ def load_data_and_update_layout(selected_files, current_min, current_max, curren
     t_min, t_max = gdl.time_range()
 
     # Build tick marks from unixtime
-    marks = range_slider_marks(t_min, t_max)
+    marks = range_slider_marks(t_min, t_max, target_mark_count=6)
 
     # Decide what slider value to use
     if (
@@ -140,7 +140,7 @@ def load_data_and_update_layout(selected_files, current_min, current_max, curren
 # 3) Update time range readout text
 @app.callback(
     Output(TextIds.TIMERANGE_READOUT, "children"),
-    Input(ControlIds.TIME_RANGE, "value"),
+    Input(ControlIds.TIME_RANGE, "drag_value"),
 )
 def update_time_range_readout(range_vals):
     if not range_vals or len(range_vals) != 2:
@@ -149,6 +149,43 @@ def update_time_range_readout(range_vals):
     start = dt.datetime.fromtimestamp(start).strftime("%Y-%m-%d %H:%M")
     end = dt.datetime.fromtimestamp(end).strftime("%Y-%m-%d %H:%M")
     return f"Time range: {start} – {end}"
+
+
+@app.callback(
+    Output(ControlIds.TIME_RANGE, "value", allow_duplicate=True), # lookout for race conditions w/ load_data_and_update_layout
+    Input(ControlIds.TIME_BTN_DAY, "n_clicks"),
+    Input(ControlIds.TIME_BTN_WEEK, "n_clicks"),
+    Input(ControlIds.TIME_BTN_MONTH, "n_clicks"),
+    State(ControlIds.TIME_RANGE, "min"),
+    State(ControlIds.TIME_RANGE, "max"),
+    prevent_initial_call=True,
+)
+def set_recent_time_block(n_day, n_week, n_month, t_min, t_max):
+    trig = ctx.triggered_id
+    if trig is None or t_min is None or t_max is None:
+        return no_update
+
+    # Use the latest available time as the block end
+    end = float(t_max)
+
+    DAY = 24 * 3600
+    WEEK = 7 * DAY
+    MONTH = 30 * DAY
+
+    if trig == ControlIds.TIME_BTN_DAY:
+        start = end - DAY
+    elif trig == ControlIds.TIME_BTN_WEEK:
+        start = end - WEEK
+    elif trig == ControlIds.TIME_BTN_MONTH:
+        start = end - MONTH
+    else:
+        return no_update
+
+    # Clamp to slider bounds
+    start = max(float(t_min), start)
+    end = min(float(t_max), end)
+
+    return [int(start), int(end)]
 
 
 @app.callback(

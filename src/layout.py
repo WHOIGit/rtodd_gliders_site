@@ -58,21 +58,48 @@ def make_navbar() -> dbc.Navbar:
 def time_slider_card():
     card = dbc.Card(
         [
-            dbc.CardHeader("Time Range"),
+            dbc.CardHeader(
+                dbc.Row(
+                    [
+                        dbc.Col(html.Div("Time Range"), className="fw-semibold"),
+                        dbc.Col(
+                            dbc.ButtonGroup(
+                                [
+                                    dbc.Button("Day", id=ControlIds.TIME_BTN_DAY, size="sm", outline=True, color="secondary"),
+                                    dbc.Button("Week", id=ControlIds.TIME_BTN_WEEK, size="sm", outline=True, color="secondary"),
+                                    dbc.Button("Month", id=ControlIds.TIME_BTN_MONTH, size="sm", outline=True, color="secondary"),
+                                ],
+                                size="sm",
+                            ),
+                            width="auto",
+                        ),
+                    ],
+                    align="center",
+                    className="g-2",
+                )
+            ),
             dbc.CardBody(
                 [
                     dcc.RangeSlider(
                         id=ControlIds.TIME_RANGE,
+                        className="mb-3",
                         min=0,
                         max=1,
                         step=1,
                         value=[0, 1],
                         marks={0: "0", 1: "1"},
-                        tooltip={"placement": "bottom", "always_visible": False},
+                        updatemode="drag",  # makes the readout update as you drag
+                        tooltip={
+                            "placement": "bottom",
+                            "always_visible": False,
+                            "transform": "epochToLocal",  # or "epochToUTC"
+                            "template": "{value}",  # optional, but explicit
+                            "style": {"fontSize": "0.9rem"},
+                        },
                     ),
                     html.Div(
                         id=TextIds.TIMERANGE_READOUT,
-                        className="mt-2 text-muted",
+                        #className="mt-3 text-muted",
                         style={"fontSize": "0.85rem"},
                     ),
                 ]
