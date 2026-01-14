@@ -1,6 +1,6 @@
 import datetime as dt
 import pandas as pd
-
+import numpy as np
 
 
 def range_slider_marks(t_min, t_max, target_mark_count=10):
@@ -52,3 +52,37 @@ def range_slider_marks(t_min, t_max, target_mark_count=10):
     }
 
     return marks
+
+
+def latlon_offset(lat, lon, dx, dy, scale=1):
+    """
+    Calculate new latitude and longitude given offsets in meters.
+
+    Parameters:
+    ----------
+    lat0 : float Original latitude in degrees.
+    lon0 : float Original longitude in degrees.
+    dx : float Offset in meters in the east-west direction.
+    dy : float Offset in meters in the north-south direction.
+    scale : float|str Scaling factor for the offsets. also accepts 'm', 'km', 'miles'.
+    """
+    if isinstance(scale, str):
+        if scale=='m' or scale.startswith('meter'):
+            scale = 111139
+        elif scale=='km' or scale.startswith('kilometer'):
+            scale = 111.139
+        elif scale.startswith('mile'):
+            scale = 69.0
+    else:
+        scale = float(scale)
+
+    dlat = dy / scale
+    dlon = dx / (scale * np.cos(np.radians(lat)))
+
+    # New latitude and longitude
+    new_lat = lat + dlat
+    new_lon = lon + dlon
+
+    return new_lat, new_lon
+
+

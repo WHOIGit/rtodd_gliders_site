@@ -88,7 +88,7 @@ def load_data_and_update_layout(selected_files, current_min, current_max, curren
     gdl = data_loader.GliderDataLoader()
     gdl.set_selected_files(selected_files)
 
-    store_data = dict(latlon_dfs={}, instrument_dfs=defaultdict(dict), dv_fields={})
+    store_data = dict(latlon_records={}, instrument_records=defaultdict(dict), dv_fields={}, uv_records={})
     inst_names = set()
 
     # Dependent variable metadata
@@ -99,14 +99,14 @@ def load_data_and_update_layout(selected_files, current_min, current_max, curren
 
     # Dataframes per glider and per instrument
     for glider_sn in gdl.glider_sns():
-        df_latlon = gdl.build_glider_df(glider_sn)
-        store_data['latlon_dfs'][glider_sn] = df_latlon.to_dict('records')
+        store_data['latlon_records'][glider_sn] = gdl.build_glider_df(glider_sn).to_dict('records')
+        store_data['uv_records'][glider_sn] = gdl.build_uv_df(glider_sn).to_dict('records')
 
         # per-instrument dfs for plots
         for inst_name in gdl.instruments():
             if gdl.instrument_in_glider(inst_name, glider_sn):
                 df = gdl.build_instrument_df(glider_sn, inst_name)
-                store_data['instrument_dfs'][glider_sn][inst_name] = df.to_dict('records')
+                store_data['instrument_records'][glider_sn][inst_name] = df.to_dict('records')
 
 
     # Use Unixtime for slider bounds

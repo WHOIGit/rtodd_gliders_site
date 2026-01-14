@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 import pandas as pd
 
 # Dash pages expects a `layout` variable in the module
+from utils import latlon_offset
 from .layout import layout
 from names import *
 from .names import *
@@ -24,7 +25,7 @@ app = dash.get_app()
 
 map_margins = dict(margin=dict(l=0, r=0, t=0, b=0))
 map_fig_common_layout_kwargs = dict(
-    style="white-bg",
+    #style="white-bg",
     layers=[dict(
         below="traces",
         sourcetype="raster",
@@ -46,8 +47,9 @@ def blank_map():
     Input(ControlIds.TIME_RANGE, "value")
 )
 def update_map(store_data, time_range):
-    latlon_dfs = (store_data or {}).get("latlon_dfs", {})
-    if not latlon_dfs:
+    latlon_records = (store_data or {}).get("latlon_records", {})
+    uv_records = (store_data or {}).get("uv_records", {})
+    if not latlon_records:
         return blank_map()
 
     COLOR_CYCLE = cycle([
@@ -70,7 +72,7 @@ def update_map(store_data, time_range):
 
     fig = go.Figure()
     maxlat, minlat, maxlon, minlon = -180,180,-180,180
-    for glider_sn, records in latlon_dfs.items():
+    for glider_sn, records in latlon_records.items():
         color = next(COLOR_CYCLE)
         color_rgba = next(COLOR_CYCLE_RGBA)
         legendgroup = f"SN {glider_sn}"
@@ -79,7 +81,7 @@ def update_map(store_data, time_range):
         if df.empty or not {"lat", "lon"}.issubset(df.columns):
             continue
 
-        # optional: filter by time range if available
+        # filter by time range if available
         if time_range and "time" in df.columns:
             start, end = time_range
             df = df[(df["time"] >= start) & (df["time"] <= end)]
@@ -117,13 +119,17 @@ def update_map(store_data, time_range):
         ))
 
         # add u,v vectors if available
-        if {"u", "v"}.issubset(df.columns):
-            SCALE_FACTOR = 0.4
-            df_uv = df.dropna()
+        if uv_records and glider_sn in uv_records:
+            SCALE_FACTOR = 1
+            uv_recs = uv_records[glider_sn]
+            df_uv = pd.DataFrame(uv_recs)
+            if time_range and "time" in df.columns:
+                start, end = time_range
+                df_uv = df_uv[(df_uv["time"] >= start) & (df_uv["time"] <= end)]
             vlats, ulons = [], []
-            for index, row in df_uv.iterrows():
+            for _, row in df_uv.iterrows():
                 lat, lon = row["lat"], row["lon"]
-                ulon, vlat = lon + row["u"]*SCALE_FACTOR, lat + row["v"]*SCALE_FACTOR
+                vlat,ulon = latlon_offset(lat, lon, row["v"], row["u"], SCALE_FACTOR)
                 ulons += [lon, ulon, None]
                 vlats += [lat, vlat, None]
             fig.add_trace(go.Scattermap(

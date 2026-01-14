@@ -94,8 +94,18 @@ class GliderDataLoader:
         flat_data = {}
         for key in ['time','lat','lon']:
             flat_data[key] = list(chain.from_iterable(data[key]))
-        for key in ['u','v']:
-            flat_data[key] = list(chain.from_iterable([(np.nan,k) for k in data[key]]))
+        df = pd.DataFrame(flat_data)
+        df['glider_sn'] = glider_sn
+        return df
+
+    def build_uv_df(self, glider_sn):
+        data = self.glider_jsons[self.sn_to_filename(glider_sn)]
+
+        midlats = [(divestart + diveend)/2 for divestart,diveend in data['lat']]
+        midlons = [(divestart + diveend)/2 for divestart,diveend in data['lon']]
+        timestamps = [timestart for timestart,timeend in data['time']]
+        flat_data = dict(time=timestamps, lat=midlats, lon=midlons, u=data['u'], v=data['v'])
+
         df = pd.DataFrame(flat_data)
         df['glider_sn'] = glider_sn
         return df
