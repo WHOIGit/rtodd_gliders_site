@@ -129,7 +129,7 @@ def update_map(store_data, time_range):
             vlats, ulons = [], []
             for _, row in df_uv.iterrows():
                 lat, lon = row["lat"], row["lon"]
-                vlat,ulon = latlon_offset(lat, lon, row["v"], row["u"], SCALE_FACTOR)
+                vlat,ulon = latlon_offset(lat, lon, row["u"], row["v"], SCALE_FACTOR)
                 ulons += [lon, ulon, None]
                 vlats += [lat, vlat, None]
             fig.add_trace(go.Scattermap(
