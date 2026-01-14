@@ -5,11 +5,16 @@ from .names import *
 def float_box():
     return html.Div(
         [
-            html.H5("Map Info", className="mb-2"),
+            html.H5("Spray Glider Operations at WHOI", className="mb-2"),
             html.P(
-                "Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
-                "Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
+                "Autonomous underwater gliders are able to fly through the ocean for months at a time, "
+                "returning measurement of many key water properties. "
+                "Our group at the Woods Hole Oceanographic Institution (WHOI) "
+                "operates a fleet of Spray gliders as a contribution to the "
+                "Global Ocean Observing System and in support of various oceanographic field campaigns"
             ),
+            html.P('Our work is funded by:'),
+            html.Img(src="/assets/sponsors.png", style={"width": "250px"}),
         ],
         className="map-overlay",
     )
