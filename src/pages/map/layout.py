@@ -1,21 +1,40 @@
-from dash import html
-import dash_bootstrap_components as dbc
 from dash import html, dcc
 
 from .names import *
 
-def map_row():
+def float_box():
     return html.Div(
-    dcc.Graph(
+        [
+            html.H5("Map Info", className="mb-2"),
+            html.P(
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
+                "Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
+            ),
+        ],
+        className="map-overlay",
+    )
+
+
+def main_row():
+    map_div = dcc.Graph(
         id=MapIds.GRAPH,
         style={"height": "100%", "width": "100%"},
         config={"displayModeBar": True,"responsive": True},
-    ),
-    className="flex-grow-1 d-flex",
-    style={"minHeight": 0},
-)
+    )
+
+    floatbox_div = float_box()
+
+    return html.Div(
+        [
+            map_div,
+            floatbox_div
+        ],
+        className="flex-grow-1 d-flex",
+        style={"minHeight": 0},
+    )
 
 
 
 # Expose a layout object that main.py imports
-layout = map_row()
+layout = main_row()
+

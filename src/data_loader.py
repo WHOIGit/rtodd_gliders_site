@@ -173,3 +173,4 @@ class GliderDataLoader:
         if instrument_key in self.glider_jsons[self.sn_to_filename(glider_sn)]:
             return True
         return False
+
