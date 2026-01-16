@@ -54,7 +54,7 @@ def range_slider_marks(t_min, t_max, target_mark_count=10):
     return marks
 
 
-def latlon_offset(lat, lon, dx, dy, scale=1):
+def latlon_offset(lat, lon, v_dy, u_dx, scale=1):
     """
     Calculate new latitude and longitude given offsets in meters.
 
@@ -76,8 +76,8 @@ def latlon_offset(lat, lon, dx, dy, scale=1):
     else:
         scale = float(scale)
 
-    dlat = dy / scale
-    dlon = dx / (scale * np.cos(np.radians(lat)))
+    dlat = v_dy / scale
+    dlon = u_dx / (scale * np.cos(np.radians(lat)))
 
     # New latitude and longitude
     new_lat = lat + dlat

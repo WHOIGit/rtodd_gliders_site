@@ -18,7 +18,6 @@ class GliderDataLoader:
         self.glider_jsons = dict()
         self.selected_files = []
 
-    @property
     def files_available(self):
         if not self.data_dir.exists():
             return []
@@ -34,14 +33,33 @@ class GliderDataLoader:
             self.load_glider_json(filename)
             self.selected_files.append(filename)
 
-    def load_glider_json(self, filename: str, force: bool=False) -> Dict[str, Any]:
+    def latest_filemodified_timestamp(self):
+        latest_mtime = 0
+        for filename in self.files_available():
+            path = self.data_dir / filename
+            mtime = path.stat().st_mtime
+            if mtime > latest_mtime:
+                latest_mtime = mtime
+        latest_mtime = dt.datetime.fromtimestamp(latest_mtime).isoformat(timespec='seconds')
+        return latest_mtime
+
+    def load_glider_json(self, filename=None, force: bool=False) -> Dict[str, Any]:
         if filename in self.glider_jsons and not force:
             return self.glider_jsons[filename]
-        path = self.data_dir / filename
-        with path.open() as f:
-            content = json.load(f)
-        self.glider_jsons[filename] = content
-        return content
+        if isinstance(filename,str):
+            path = self.data_dir / filename
+            with path.open() as f:
+                content = json.load(f)
+            self.glider_jsons[filename] = content
+            return content
+        elif isinstance(filename,list):
+            for f in filename:
+                self.load_glider_json(f, force=force)
+        else:
+            if not self.selected_files:
+                self.selected_files = self.files_available()
+            for f in self.selected_files:
+                self.load_glider_json(f, force=force)
 
     def glider_sns(self):
         sns = []
