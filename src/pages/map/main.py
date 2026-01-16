@@ -134,9 +134,10 @@ def blank_map():
     Output(MapIds.GRAPH, "figure"),
     Input(StoreIds.MAPDATA_STORE, "data"),
     Input(StoreIds.TIMERANGE_STORE, "data"),
+    Input(ControlIds.UV_SCALE, "value"),
     prevent_initial_call=False,
 )
-def update_map(store_data, time_range):
+def update_map(store_data, time_range, uv_scale):
     print("store_data", type(store_data), time_range)
 
     store_data = store_data or {}
@@ -214,7 +215,6 @@ def update_map(store_data, time_range):
 
         # add u,v vectors if available
         if uv_records and glider_sn in uv_records:
-            SCALE_FACTOR = 1
             uv_recs = uv_records[glider_sn]
             df_uv = pd.DataFrame(uv_recs)
             if time_range and "time" in df.columns:
@@ -223,7 +223,7 @@ def update_map(store_data, time_range):
             vlats, ulons = [], []
             for _, row in df_uv.iterrows():
                 lat, lon = row["lat"], row["lon"]
-                vlat,ulon = latlon_offset(lat, lon, row["v"], row["u"], SCALE_FACTOR)
+                vlat,ulon = latlon_offset(lat, lon, row["v"], row["u"], uv_scale)
                 ulons += [lon, ulon, None]
                 vlats += [lat, vlat, None]
             fig.add_trace(go.Scattermap(

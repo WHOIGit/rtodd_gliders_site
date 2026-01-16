@@ -17,6 +17,7 @@ class ControlIds:
     GLIDER_CHECKLIST = "glider-checklist"
     TIME_RANGE_PICKER = "time-range-picker"
     UV_SCALE = "uv-scale-factor"
+    REGION_SELECT = "region-select"
 
 
 class ContainerIds:

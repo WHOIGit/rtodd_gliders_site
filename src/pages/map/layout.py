@@ -52,14 +52,39 @@ def options_div():
         className="mt-2",
     )
 
+    uv_scale = html.Div(
+        [
+            html.Div("UV Drift Scale", className="fw-semibold mb-1"),
+            dcc.Slider(
+                id=ControlIds.UV_SCALE,
+                min=0,
+                max=2,
+                step=0.1,
+                value=1.0,
+                marks={
+                    0: "off",
+                    0.5: "long",
+                    1.0: "",
+                    1.5: "short",
+                    2: ""
+                },
+                tooltip={"placement": "bottom", "always_visible": False},
+            ),
+        ],
+        className="mt-3",
+    )
+
+
+
     return html.Div(
         [
-            html.P('Select Time Range'),
+            html.Div("Time Range", className="fw-semibold mb-1"),
             btn_grp,
             custom_picker,  # hidden
 
             html.Hr(className="my-3"),
-            html.P('Select UV Glider Drift Scale'),
+            uv_scale,
+
         ])
 
 
