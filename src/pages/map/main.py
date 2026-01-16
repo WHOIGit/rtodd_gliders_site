@@ -129,16 +129,21 @@ def blank_map():
     fig.update_layout(map=map_fig_common_layout_kwargs)
     return fig
 
+# TODO config file
+REGION_PRESETS = {
+    "global":      {"center": {"lat": 0, "lon": 0}, "zoom": 1.2},
+    "gulfstream": {"center": {"lat": 35.0, "lon": -65.0}, "zoom": 4.2},
+}
 
 @app.callback(
     Output(MapIds.GRAPH, "figure"),
     Input(StoreIds.MAPDATA_STORE, "data"),
     Input(StoreIds.TIMERANGE_STORE, "data"),
     Input(ControlIds.UV_SCALE, "value"),
+    Input(ControlIds.REGION_SELECT, "value"),
     prevent_initial_call=False,
 )
-def update_map(store_data, time_range, uv_scale):
-    print("store_data", type(store_data), time_range)
+def update_map(store_data, time_range, uv_scale, region_key):
 
     store_data = store_data or {}
     latlon_records = store_data.get("latlon_records", {})
@@ -266,10 +271,16 @@ def update_map(store_data, time_range, uv_scale):
     if not fig.data:
         return blank_map()
 
-    # Center/zoom roughly on data
-    max_bound = max(abs(maxlon - minlon), abs(maxlat - minlat)) * 111
-    zoom = 12 - np.log(max_bound)
-    center = dict(lat=(maxlat + minlat) / 2, lon=(maxlon + minlon) / 2)
+    # Set Center and Zoom
+    if region_key == 'auto':
+        max_bound = max(abs(maxlon - minlon), abs(maxlat - minlat)) * 111
+        zoom = 12 - np.log(max_bound)
+        center = dict(lat=(maxlat + minlat) / 2, lon=(maxlon + minlon) / 2)
+    else:
+        region_preset = REGION_PRESETS.get(region_key, REGION_PRESETS["global"])
+        center = region_preset["center"]
+        zoom = region_preset["zoom"]
+    print(region_key, center, zoom)
 
     legend_layout = dict(
         x=0.99,
@@ -289,7 +300,6 @@ def update_map(store_data, time_range, uv_scale):
             **map_fig_common_layout_kwargs,
         ),
         legend = legend_layout,
-        uirevision="map",
         **map_margins,
     )
 

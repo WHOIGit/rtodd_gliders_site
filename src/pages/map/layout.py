@@ -74,7 +74,20 @@ def options_div():
         className="mt-3",
     )
 
-
+    region_select = dbc.RadioItems(
+        id=ControlIds.REGION_SELECT,
+        options=[
+            {"label": "Auto", "value": "auto"},
+            {"label": "Gulf Stream", "value": "gulfstream"},
+            {"label": "Global", "value": "global"},
+        ],
+        value="auto",
+        inline=False,
+        className="btn-group-vertical w-100",
+        inputClassName="btn-check",
+        labelClassName="btn btn-outline-secondary btn-sm",
+        labelCheckedClassName="btn btn-secondary btn-sm",
+    )
 
     return html.Div(
         [
@@ -85,6 +98,9 @@ def options_div():
             html.Hr(className="my-3"),
             uv_scale,
 
+            html.Hr(className="my-3"),
+            html.Div("Region", className="fw-semibold mb-1"),
+            region_select,
         ])
 
 
