@@ -196,7 +196,7 @@ def update_map(store_data, time_range, uv_scale, region_key):
         maxlon = max(maxlon, float(df["lon"].max()))
 
         df['datetimestr'] = pd.to_datetime(df.time, unit='s').dt.strftime('%Y-%m-%d %H:%M:%S')
-        customdata = [[glider_sn, datestr.split()[0], datestr.split()[1]] for datestr in df.datetimestr]
+        customdata = [[glider_sn, int(section), datestr.split()[0], datestr.split()[1]] for datestr, section in zip(df.datetimestr, df.section)]
 
         # add trace for this glider
         fig.add_trace(go.Scattermap(
@@ -211,8 +211,9 @@ def update_map(store_data, time_range, uv_scale, region_key):
                 "<b>Glider %{customdata[0]}</b><br>"
                 "Lat: %{lat}<br>"
                 "Lon: %{lon}<br>"
-                "Date: %{customdata[1]}<br>"
-                "Time: %{customdata[2]}"
+                "Date: %{customdata[2]}<br>"
+                "Time: %{customdata[3]}<br>"
+                "Section: %{customdata[1]}"
                 "<extra></extra>"
             ),
             customdata=customdata,
@@ -262,7 +263,8 @@ def update_map(store_data, time_range, uv_scale, region_key):
                 "Lat: %{lat}<br>"
                 "Lon: %{lon}<br>"
                 "Date: %{customdata[1]}<br>"
-                "Time: %{customdata[2]}"
+                "Time: %{customdata[3]}<br>"
+                "Section: %{customdata[1]}"
                 "<extra></extra>"
             ),
             customdata=[customdata[-1]]
@@ -280,7 +282,7 @@ def update_map(store_data, time_range, uv_scale, region_key):
         region_preset = REGION_PRESETS.get(region_key, REGION_PRESETS["global"])
         center = region_preset["center"]
         zoom = region_preset["zoom"]
-    print(region_key, center, zoom)
+    #print(region_key, center, zoom)
 
     legend_layout = dict(
         x=0.99,
@@ -326,7 +328,6 @@ def load_mapdata_from_source():
     latlon_records, uv_records = {}, {}
     for sn in gdl.glider_sns():
         latlon_records[sn] = gdl.build_glider_df(glider_sn=sn).to_dict('records')
-
         uv_sn_df = gdl.build_uv_df(glider_sn=sn)
         new_lats, new_lons = latlon_offset(
             uv_sn_df["lat"].values,
@@ -393,6 +394,112 @@ def toggle_custom_time_picker(
 
     # any other button hides it
     return {"display": "none"}
+
+
+@app.callback(
+    Output(ControlIds.GLIDER_SELECT, "options"),
+    Input(StoreIds.MAPDATA_STORE, "data"),
+)
+def set_glider_options(store_data):
+    store_data = store_data or {}
+    latlon_records = store_data.get("latlon_records", {})
+    sns = sorted(latlon_records.keys())
+    return [{"label": f"SN {sn}", "value": str(sn)} for sn in sns]
+
+
+@app.callback(
+    Output(TextIds.SECTION_DETAILS_TEXT, "children"),
+    Input(ControlIds.GLIDER_SELECT, "value"),
+    Input(ControlIds.SECTION_SELECT, "value"),
+    State(StoreIds.MAPDATA_STORE, "data"),
+)
+def populate_section_details(glider_sn, section_num, store_data):
+    if not glider_sn or section_num is None:
+        return "Select a glider and section to see details."
+
+    store_data = store_data or {}
+
+    # TEMPLATE: replace with real lookup
+    # Example text:
+    return (
+        f"Glider: SN {glider_sn}\n"
+        f"Section: {section_num}\n\n"
+        "Details:\n"
+        f"- {store_data.keys()}\n"
+        "- …\n"
+    )
+
+def get_sections_for_glider(store_data, glider_sn):
+    # TEMPLATE: replace with your real source.
+    latlon_records = (store_data or {}).get("latlon_records", {})
+    recs = latlon_records.get(glider_sn, [])
+    secs = sorted({int(r["section"]) for r in recs if "section" in r and r["section"] is not None})
+    return secs
+
+@app.callback(
+    Output(ControlIds.GLIDER_SELECT, "value"),
+    Output(ControlIds.SECTION_SELECT, "options"),
+    Output(ControlIds.SECTION_SELECT, "value"),
+    Output(ContainerIds.MAP_ACCORDION, "active_item"),
+    Input(MapIds.GRAPH, "clickData"),
+    Input(ControlIds.GLIDER_SELECT, "value"),
+    State(StoreIds.MAPDATA_STORE, "data"),
+    State(ContainerIds.MAP_ACCORDION, "active_item"),
+    prevent_initial_call=True,
+)
+def sync_section_ui(clickData, glider_value, store_data, active_item):
+    trig = dash.ctx.triggered_id
+
+    # Defaults: don't change unless we decide to
+    new_glider = no_update
+    new_section_value = no_update
+    new_active = no_update
+
+    # Determine glider + section from click if that's the trigger
+    clicked_glider = None
+    clicked_section = None
+    if trig == MapIds.GRAPH:
+        if not clickData or not clickData.get("points"):
+            raise PreventUpdate
+        cd = clickData["points"][0].get("customdata")
+        if not cd or len(cd) < 2:
+            raise PreventUpdate
+        clicked_glider = str(cd[0])
+        try:
+            clicked_section = int(cd[1])
+        except Exception:
+            clicked_section = None
+
+        new_glider = clicked_glider
+        new_section_value = clicked_section
+
+        # open accordion on map click
+        new_active = [ContainerIds.SECTION_DETAILS] if isinstance(active_item, list) else ContainerIds.SECTION_DETAILS
+
+        glider_for_options = clicked_glider
+
+    else:
+        # manual glider dropdown change -> just update section options
+        if not glider_value:
+            # no glider -> clear sections
+            return glider_value, [], None, no_update
+
+        glider_for_options = str(glider_value)
+        new_glider = glider_for_options
+        # don't open accordion just because dropdown changed
+        new_active = no_update
+        # keep section value as-is (Dash may clear it if not in new options)
+        new_section_value = no_update
+
+    # Build section options for the chosen glider
+    sections = get_sections_for_glider(store_data, glider_for_options)
+    opts = [{"label": str(s), "value": s} for s in sections]
+
+    # If click provided a section, ensure it's present in options so value sticks
+    if trig == MapIds.GRAPH and clicked_section is not None and clicked_section not in sections:
+        opts = [{"label": str(clicked_section), "value": clicked_section}] + opts
+
+    return new_glider, opts, new_section_value, new_active
 
 
 

@@ -18,11 +18,15 @@ class ControlIds:
     TIME_RANGE_PICKER = "time-range-picker"
     UV_SCALE = "uv-scale-factor"
     REGION_SELECT = "region-select"
+    GLIDER_SELECT = "glider-select"
+    SECTION_SELECT = "section-select"
 
 
 class ContainerIds:
+    MAP_ACCORDION = "map-accordion"
     HIDDEN_CUSTOMTIME_CONTAINER = "time-custom-container"
+    SECTION_DETAILS = "accordion-section-details"
 
 class TextIds:
-    STATUS = "status-text"
-    TIMERANGE_READOUT = "time-range-readout"
+    SECTION_DETAILS_TEXT = "section-details-text"
+

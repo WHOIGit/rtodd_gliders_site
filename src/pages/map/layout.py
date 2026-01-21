@@ -104,17 +104,79 @@ def options_div():
         ])
 
 
+def section_details_div():
+    controls = html.Div(
+        [
+            # Inline row: glider dropdown + section integer dropdown
+            dbc.Row(
+                [
+                    dbc.Col(
+                        [
+                            html.Div("Glider", className="fw-semibold mb-1"),
+                            dcc.Dropdown(
+                                id=ControlIds.GLIDER_SELECT,
+                                options=[],          # filled by callback
+                                value=None,
+                                placeholder="Select glider...",
+                                clearable=True,
+                            ),
+                        ],
+                        width=7,
+                    ),
+                    dbc.Col(
+                        [
+                            html.Div("Section", className="fw-semibold mb-1"),
+                            dcc.Dropdown(
+                                id=ControlIds.SECTION_SELECT,
+                                options=[],          # filled by callback
+                                value=None,
+                                placeholder="Select #",
+                                clearable=True,
+                            ),
+                        ],
+                        width=5,
+                    ),
+                ],
+                className="g-2",
+                align="end",
+            ),
+
+            # Output text area
+            html.Div(
+                "Select a glider and section to see details.",
+                id=TextIds.SECTION_DETAILS_TEXT,
+                className="mt-3 small",
+                style={
+                    "whiteSpace": "pre-wrap",
+                    "maxHeight": "180px",
+                    "overflowY": "auto",
+                    "border": "1px solid rgba(0,0,0,0.1)",
+                    "borderRadius": "6px",
+                    "padding": "8px",
+                    "background": "rgba(255,255,255,0.85)",
+                },
+            ),
+        ]
+    )
+
+    return controls
+
+
+
+
 def float_box():
     intro = intro_div()
-
     options = options_div()
+    sections_info = section_details_div()
 
     accordion = dbc.Accordion(
         [
             dbc.AccordionItem(intro, title="Spray Glider Operations at WHOI", item_id="map-info"),
             dbc.AccordionItem(options, title="Map Options"),
+            dbc.AccordionItem(sections_info, title="Section Details", item_id=ContainerIds.SECTION_DETAILS),
         ],
-        flush=True,            # cleaner edges inside the box
+        id=ContainerIds.MAP_ACCORDION,
+        flush=True,
         always_open=False,
         active_item='map-info',
     )

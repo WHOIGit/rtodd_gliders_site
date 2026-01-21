@@ -17,6 +17,8 @@ class GliderDataLoader:
         self.data_dir = data_dir
         self.glider_jsons = dict()
         self.selected_files = []
+        self.section_ranges = dict()
+        self.load_secsactive2()
 
     def files_available(self):
         if not self.data_dir.exists():
@@ -60,6 +62,28 @@ class GliderDataLoader:
                 self.selected_files = self.files_available()
             for f in self.selected_files:
                 self.load_glider_json(f, force=force)
+
+    def load_secsactive2(self):
+        """
+        Returns dict:
+          { "0209": [(1,22), (23,42), ..., (720, np.inf)],
+            "0212": [(1,21), (22,42), (43, np.inf)],
+            ...
+          }
+        """
+        df = pd.read_csv(self.data_dir/'secsactive2.csv', header=None, names=["sn", "start", "end"], dtype={"sn": int, "start": float, "end": float})
+        #df["sn"] = df["sn"].str.zfill(4)
+
+        # parse Inf
+        # df["end"] = df["end"].astype(str)
+        # df["end"] = df["end"].replace({"Inf": str(np.inf), "inf": str(np.inf)})
+        # df["end"] = df["end"].astype(float)
+
+        #df["start"] = df["start"].astype(int)
+
+        self.section_ranges = {}
+        for sn, g in df.groupby("sn", sort=False):
+            self.section_ranges[sn] = [(int(r.start), float(r.end)) for r in g.itertuples(index=False)]
 
     def glider_sns(self):
         sns = []
@@ -113,7 +137,32 @@ class GliderDataLoader:
         for key in ['time','lat','lon']:
             flat_data[key] = list(chain.from_iterable(data[key]))
         df = pd.DataFrame(flat_data)
-        df['glider_sn'] = glider_sn
+
+        # your ndive logic
+        df["ndive"] = np.repeat(np.arange(1, len(df) // 2 + 1), 2)
+
+        # default if no sec_ranges
+        df["section"] = 1
+
+        #print(glider_sn, self.section_ranges.keys())
+        if self.section_ranges:
+            ranges = self.section_ranges.get(glider_sn)
+            if ranges:
+                # assign sequential section id based on row order in secactive2.csv
+                section = np.full(len(df), np.nan)
+
+                nd = df["ndive"].to_numpy()
+
+                for i, (start, end) in enumerate(ranges, start=1):
+                    if np.isinf(end):
+                        mask = nd >= start
+                    else:
+                        mask = (nd >= start) & (nd <= end)
+                    section[mask] = i
+
+                # If some dives don’t match any range (shouldn’t happen), set 1 or keep NaN
+                df["section"] = np.nan_to_num(section, nan=1).astype(int)
+
         return df
 
     def build_uv_df(self, glider_sn):
