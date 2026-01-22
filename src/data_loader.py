@@ -175,6 +175,28 @@ class GliderDataLoader:
 
         df = pd.DataFrame(flat_data)
         df['glider_sn'] = glider_sn
+
+        # ndive for uv: 1..N (since uv is per-dive, not per-endpoint)
+        df["ndive"] = np.arange(1, len(df) + 1)
+
+        # default if no sec_ranges
+        df["section"] = 1
+
+        if self.section_ranges:
+            ranges = self.section_ranges.get(glider_sn)
+            if ranges:
+                section = np.full(len(df), np.nan)
+                nd = df["ndive"].to_numpy()
+
+                for i, (start, end) in enumerate(ranges, start=1):
+                    if np.isinf(end):
+                        mask = nd >= start
+                    else:
+                        mask = (nd >= start) & (nd <= end)
+                    section[mask] = i
+
+                df["section"] = np.nan_to_num(section, nan=1).astype(int)
+
         return df
 
     def glider_ndive_t0(self, glider_sn, ndive):

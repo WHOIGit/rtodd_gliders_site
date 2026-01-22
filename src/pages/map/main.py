@@ -122,6 +122,19 @@ def set_active_time_button(active_btn_id):
     )
 
 
+def rgb_to_hex(r:int, g:int, b:int, a=None):
+    """
+    Convert RGBA to HEX.
+    r, g, b : int [0–255]
+    a       : float [0–1]
+    """
+    if a is None:
+        return "#{:02X}{:02X}{:02X}".format(
+            int(r), int(g), int(b) )
+    else:
+        return "#{:02X}{:02X}{:02X}{:02X}".format(
+            int(r), int(g), int(b), int(a * 255))
+
 
 def blank_map():
     fig = go.Figure()
@@ -153,33 +166,28 @@ def update_map(store_data, time_range, uv_scale, region_key):
         return blank_map()
 
     COLOR_CYCLE = cycle([
-        "#1f77b4",  # blue
-        "#ff7f0e",  # orange
-        "#2ca02c",  # green
-        "#d62728",  # red
-        "#9467bd",  # purple
-        "#8c564b",  # brown
-    ])
-    opacity = 0.6
-    COLOR_CYCLE_RGBA = cycle([
-        f"rgba(31, 119, 180, {opacity})",  # blue
-        f"rgba(255, 127, 14, {opacity})",  # orange
-        f"rgba(44, 160, 44, {opacity})",  # green
-        f"rgba(214, 39, 40, {opacity})",  # red
-        f"rgba(148, 103, 189, {opacity})",  # purple
-        f"rgba(140, 86, 75, {opacity})",  # brown
+        ( 31, 119, 180), # blue
+        (255, 127,  14), # orange
+        ( 44, 160,  44), # green
+        (214,  39,  40), # red
+        (148, 103, 189), # purple
+        (140,  86,  75), # brown
     ])
 
     fig = go.Figure()
     maxlat, minlat, maxlon, minlon = -180,180,-180,180
     for glider_sn, records in latlon_records.items():
-        color = next(COLOR_CYCLE)
-        color_rgba = next(COLOR_CYCLE_RGBA)
+        color_rgb = next(COLOR_CYCLE)
+        color_hex = rgb_to_hex(*color_rgb)
         legendgroup = f"SN {glider_sn}"
 
         df = pd.DataFrame(records)
+        df['dt'] = pd.to_datetime(df.time, unit='s')
         if df.empty or not {"lat", "lon"}.issubset(df.columns):
             continue
+
+        num_of_sections = len(set(df.section))
+        opacities = np.linspace(0.2, 1, num_of_sections)
 
         # filter by time range if available
         if time_range and "time" in df.columns:
@@ -195,66 +203,108 @@ def update_map(store_data, time_range, uv_scale, region_key):
         minlon = min(minlon, float(df["lon"].min()))
         maxlon = max(maxlon, float(df["lon"].max()))
 
-        df['datetimestr'] = pd.to_datetime(df.time, unit='s').dt.strftime('%Y-%m-%d %H:%M:%S')
-        customdata = [[glider_sn, int(section), datestr.split()[0], datestr.split()[1]] for datestr, section in zip(df.datetimestr, df.section)]
+        for section, df_sec in df.groupby("section", sort=False):
+            customdata = list(
+                zip(
+                    [glider_sn]*len(df_sec),
+                    df_sec["section"],  # customdata[1]
+                    df_sec["dt"].dt.date.astype(str),  # customdata[2]
+                    df_sec["dt"].dt.time.astype(str),  # customdata[3]
+                    df_sec["ndive"],  # customdata[4]
+                )
+            )
+            opacity = opacities[section-1]
+            color = 'rgba({},{},{},{})'.format(*color_rgb, opacity)
+            fig.add_trace(
+                go.Scattermap(
+                    lat=df_sec["lat"],
+                    lon=df_sec["lon"],
+                    mode="lines", # markers+lines
+                    name=f"SN {glider_sn}",
+                    legendgroup=legendgroup,  # or f"{glider_sn}"
+                    marker=dict(size=6, color=color),
+                    line=dict(width=3, color=color),
+                    hovertemplate=(
+                        "<b>Glider %{customdata[0]}</b><br>"
+                        "Lat: %{lat}<br>"
+                        "Lon: %{lon}<br>"
+                        "Date: %{customdata[2]}<br>"
+                        "Time: %{customdata[3]}<br>"
+                        "Section: %{customdata[1]}<br>"
+                        "NDive: %{customdata[4]}<br>"
+                        "<extra></extra>"
+                    ),
+                    customdata=customdata,
+                    showlegend=bool(opacity == 1),
+                )
+            )
 
-        # add trace for this glider
-        fig.add_trace(go.Scattermap(
-            lat=df["lat"],
-            lon=df["lon"],
-            mode="markers+lines",
-            name=f"SN {glider_sn}",
-            legendgroup = legendgroup,
-            marker=dict(size=6, color=color),
-            line=dict(width=3, color=color),
-            hovertemplate=(
-                "<b>Glider %{customdata[0]}</b><br>"
-                "Lat: %{lat}<br>"
-                "Lon: %{lon}<br>"
-                "Date: %{customdata[2]}<br>"
-                "Time: %{customdata[3]}<br>"
-                "Section: %{customdata[1]}"
-                "<extra></extra>"
-            ),
-            customdata=customdata,
-        ))
+        # df['datetimestr'] = pd.to_datetime(df.time, unit='s').dt.strftime('%Y-%m-%d %H:%M:%S')
+        # customdata = [[glider_sn, int(section), datestr.split()[0], datestr.split()[1]] for datestr, section in zip(df.datetimestr, df.section)]
+        #
+        # # add trace for this glider
+        # fig.add_trace(go.Scattermap(
+        #     lat=df["lat"],
+        #     lon=df["lon"],
+        #     mode="markers+lines",
+        #     name=f"SN {glider_sn}",
+        #     legendgroup = legendgroup,
+        #     marker=dict(size=6, color=color),
+        #     line=dict(width=3, color=color),
+        #     hovertemplate=(
+        #         "<b>Glider %{customdata[0]}</b><br>"
+        #         "Lat: %{lat}<br>"
+        #         "Lon: %{lon}<br>"
+        #         "Date: %{customdata[2]}<br>"
+        #         "Time: %{customdata[3]}<br>"
+        #         "Section: %{customdata[1]}"
+        #         "<extra></extra>"
+        #     ),
+        #     customdata=customdata,
+        # ))
 
         # add u,v vectors if available
         if uv_records and glider_sn in uv_records:
             uv_recs = uv_records[glider_sn]
             df_uv = pd.DataFrame(uv_recs)
-            if time_range and "time" in df.columns:
+
+            if time_range and "time" in df_uv.columns:
                 start, end = time_range
                 df_uv = df_uv[(df_uv["time"] >= start) & (df_uv["time"] <= end)]
-            vlats, ulons = [], []
-            for _, row in df_uv.iterrows():
-                lat, lon = row["lat"], row["lon"]
-                vlat,ulon = latlon_offset(lat, lon, row["v"], row["u"], uv_scale)
-                ulons += [lon, ulon, None]
-                vlats += [lat, vlat, None]
-            fig.add_trace(go.Scattermap(
-                lat=vlats,
-                lon=ulons,
-                name=f"SN {glider_sn} UV",
-                legendgroup=legendgroup,
-                showlegend=False,
-                hoverinfo="skip",
-                mode="lines",
-                line=dict(width=1, color=color_rgba), # argh, no OPACITY
-            ))
+
+            for section, df_uv_sec in df_uv.groupby("section", sort=False):
+
+                opacity = opacities[section - 1]
+                color = 'rgba({},{},{},{})'.format(*color_rgb, opacity)
+
+                vlats, ulons = [], []
+                for _, row in df_uv_sec.iterrows():
+                    lat, lon = row["lat"], row["lon"]
+                    vlat,ulon = latlon_offset(lat, lon, row["v"], row["u"], uv_scale)
+                    ulons += [lon, ulon, None]
+                    vlats += [lat, vlat, None]
+
+                fig.add_trace(go.Scattermap(
+                    lat=vlats,
+                    lon=ulons,
+                    name=f"SN {glider_sn} UV",
+                    legendgroup=legendgroup,
+                    showlegend=False,
+                    hoverinfo="skip",
+                    mode="lines",
+                    line=dict(width=1, color=color), # argh, no OPACITY
+                ))
 
         # image at end of trace
-        lat_end = df["lat"].iloc[-1]
-        lon_end = df["lon"].iloc[-1]
+        end = df.iloc[-1]
         fig.add_trace(go.Scattermap(
-            lat=[lat_end],
-            lon=[lon_end],
+            lat=[end["lat"]],
+            lon=[end["lon"]],
             name=f"SN {glider_sn} Endpoint",
             mode="markers",
             marker=dict(
                 size=30,
-                symbol="star",
-                color=color,
+                symbol=f"star",
             ),
             legendgroup = legendgroup,
             showlegend=False,
@@ -262,9 +312,10 @@ def update_map(store_data, time_range, uv_scale, region_key):
                 "<b>Glider %{customdata[0]}</b><br>"
                 "Lat: %{lat}<br>"
                 "Lon: %{lon}<br>"
-                "Date: %{customdata[1]}<br>"
+                "Date: %{customdata[2]}<br>"
                 "Time: %{customdata[3]}<br>"
-                "Section: %{customdata[1]}"
+                "Section: %{customdata[1]}<br>"
+                "NDive: %{customdata[4]}<br>"
                 "<extra></extra>"
             ),
             customdata=[customdata[-1]]
@@ -500,6 +551,7 @@ def sync_section_ui(clickData, glider_value, store_data, active_item):
         opts = [{"label": str(clicked_section), "value": clicked_section}] + opts
 
     return new_glider, opts, new_section_value, new_active
+
 
 
 
