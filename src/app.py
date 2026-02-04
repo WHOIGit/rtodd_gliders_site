@@ -15,12 +15,15 @@ dash_kwargs = {
     "suppress_callback_exceptions": True,
 }
 
-if os.environ.get("PROD", False):
+TRUTHY = ("true", "1", "yes", "on", "en", "enable", "enabled")
+PROD_ENV = os.environ.get("PROD", "False").lower() in TRUTHY
+
+if PROD_ENV:
     dash_kwargs.update(
         {
             "routes_pathname_prefix": "/",
             "requests_pathname_prefix": "/dashapp/",
-            "assets_url_path": "/dashapp/assets",
+            "assets_url_path": "/assets",
         }
     )
 
@@ -36,4 +39,5 @@ app.layout = create_layout
 server = app.server
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    debug = os.getenv("DEBUG", "False").lower() in TRUTHY
+    app.run(debug=debug)

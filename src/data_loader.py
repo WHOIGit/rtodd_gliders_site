@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class GliderDataLoader:
-    def __init__(self, data_dir: Path = Path("data")):
+    def __init__(self, data_dir: Path):
         self.data_dir = data_dir
         self.glider_jsons = dict()
         self.selected_files = []
@@ -169,11 +169,13 @@ class GliderDataLoader:
         data = self.glider_jsons[self.sn_to_filename(glider_sn)]
 
         midlats = [(divestart + diveend)/2
-                   for divestart,diveend in data['lat']
-                   if isinstance(divestart,float) and isinstance(diveend,float)]
+                   if isinstance(divestart, float) and isinstance(diveend, float)
+                   else None
+                   for divestart,diveend in data['lat']]
         midlons = [(divestart + diveend)/2
-                   for divestart,diveend in data['lon']
-                   if isinstance(divestart,float) and isinstance(diveend,float)]
+                   if isinstance(divestart, float) and isinstance(diveend, float)
+                   else None
+                   for divestart,diveend in data['lon']]
         timestamps = [timestart for timestart,timeend in data['time']]
         flat_data = dict(time=timestamps, lat=midlats, lon=midlons, u=data['u'], v=data['v'])
 

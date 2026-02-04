@@ -1,4 +1,6 @@
 # layout.py
+import os
+
 import dash
 from dash import html, dcc
 import dash_bootstrap_components as dbc
@@ -16,11 +18,15 @@ def make_navbar() -> dbc.Navbar:
     for page in dash.page_registry.values():
         # You can add conditions here to hide certain pages from the navbar
         # e.g., if page.get("name") == "NotShown": continue
+        href = page["path"]
+        if os.environ.get('PROD', 'False').lower() in ("true", "1"):
+            href = '/dashapp'+page["path"]
+
         nav_items.append(
             dbc.NavItem(
                 dbc.NavLink(
                     page["name"],
-                    href=page["path"],
+                    href=href,
                     active="exact",
                 )
             )
