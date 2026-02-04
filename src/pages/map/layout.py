@@ -1,9 +1,12 @@
 import time
 
+import dash
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 
 from .names import *
+
+app = dash.get_app()
 
 
 def intro_div():
@@ -16,7 +19,7 @@ def intro_div():
             "Global Ocean Observing System and in support of various oceanographic field campaigns"
         ),
         html.P('Our work is funded by:'),
-        html.Img(src="/assets/sponsors.png", style={"width": "350px"}),
+        html.Img(src=app.get_asset_url("sponsors.png"), style={"width": "350px"}),
         ])
 
 def options_div():
