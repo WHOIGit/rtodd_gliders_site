@@ -187,7 +187,7 @@ def update_map(store_data, time_range, uv_scale, region_key):
             continue
 
         num_of_sections = len(set(df.section))
-        opacities = np.linspace(0.2, 1, num_of_sections)
+        opacities = np.linspace(0.2, 1, num_of_sections) if num_of_sections > 1 else [1.0]
 
         # filter by time range if available
         if time_range and "time" in df.columns:
