@@ -168,8 +168,12 @@ class GliderDataLoader:
     def build_uv_df(self, glider_sn):
         data = self.glider_jsons[self.sn_to_filename(glider_sn)]
 
-        midlats = [(divestart + diveend)/2 for divestart,diveend in data['lat']]
-        midlons = [(divestart + diveend)/2 for divestart,diveend in data['lon']]
+        midlats = [(divestart + diveend)/2
+                   for divestart,diveend in data['lat']
+                   if isinstance(divestart,float) and isinstance(diveend,float)]
+        midlons = [(divestart + diveend)/2
+                   for divestart,diveend in data['lon']
+                   if isinstance(divestart,float) and isinstance(diveend,float)]
         timestamps = [timestart for timestart,timeend in data['time']]
         flat_data = dict(time=timestamps, lat=midlats, lon=midlons, u=data['u'], v=data['v'])
 
