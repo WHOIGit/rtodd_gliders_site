@@ -1,4 +1,5 @@
 # app.py
+import os
 
 import dash
 import dash_bootstrap_components as dbc
@@ -8,11 +9,24 @@ from names import *
 
 external_stylesheets = [dbc.themes.BOOTSTRAP]
 
+dash_kwargs = {
+    "use_pages": True,
+    "external_stylesheets": external_stylesheets,
+    "suppress_callback_exceptions": True,
+}
+
+if os.environ.get("PROD", False):
+    dash_kwargs.update(
+        {
+            "routes_pathname_prefix": "/",
+            "requests_pathname_prefix": "/dashapp/",
+            "assets_url_path": "/dashapp/assets",
+        }
+    )
+
 app = dash.Dash(
     __name__,
-    use_pages=True,
-    external_stylesheets=external_stylesheets,
-    suppress_callback_exceptions=True,
+    **dash_kwargs,
 )
 app.title = "Glider Dashboard"
 
