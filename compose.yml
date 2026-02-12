@@ -14,5 +14,6 @@ services:
 
     volumes:
       - ./data:/app/data:ro
+      - ./config:/app/config:ro
       - ./src:/app/src:ro
     # uncomment for local development
