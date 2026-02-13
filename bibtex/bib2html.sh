@@ -15,5 +15,5 @@ pandoc frontmatter.md --bibliography="$INPUTBIB" -o "$OUTPUTHTML"
 #  (1) groups entries by year applies
 #  (2) neatens the he doi links
 #  (3) Bolds
-python3 reformat.py "$OUTPUTHTML" --bold "input/bold_authors.txt" -o "$OUTPUTHTML"
+python3 reformat.py "$OUTPUTHTML" --bold "input/bold_authors.txt" --rm-html-body -o "$OUTPUTHTML"
 

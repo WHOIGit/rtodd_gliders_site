@@ -1,42 +1,22 @@
-import dash
-from dash import html
+from pathlib import Path
 
-app = dash.get_app()
+from dash import html, dcc
 
+ASSETS_DIR = Path.cwd() / "assets"
 
 def make_layout(asset: str = "publications.html") -> html.Div:
-    src = app.get_asset_url(asset)
-
+    html_text = (ASSETS_DIR / asset).read_text(encoding="utf-8")
     return html.Div(
         [
-            html.H1(
-                "Publications",
-                style={
-                    "textAlign": "center",
-                    "marginBottom": "40px",
-                },
-            ),
+            html.H1("Publications", style={"textAlign": "center", "marginBottom": "40px"}),
+
+            # Centered container, max width 800, responsive
             html.Div(
-                html.Iframe(
-                    id="publications-iframe",
-                    src=src,
-                    style={
-                        "height": "1000px",
-                        "width": "100%",
-                        "maxWidth": "800px",
-                        "border": "none",
-                    },
-                ),
-                style={
-                    "display": "flex",
-                    "justifyContent": "center",
-                },
+                dcc.Markdown(html_text, dangerously_allow_html=True),
+                style={"maxWidth": "800px", "margin": "0 auto"},
             ),
         ],
-        style={
-            "padding": "40px 20px",
-        },
+        style={"padding": "40px 20px"},
     )
-
 
 layout = make_layout()

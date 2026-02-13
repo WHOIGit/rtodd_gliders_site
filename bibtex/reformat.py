@@ -148,7 +148,7 @@ def group_refs_by_year(soup: BeautifulSoup) -> None:
             refs.append(ref_div)
 
 
-def transform_html(html: str, embolden=tuple()) -> str:
+def transform_html(html: str, embolden=tuple()) -> BeautifulSoup:
     soup = BeautifulSoup(html, "lxml")
 
     # Transform each reference paragraph (DOI + bold author)
@@ -163,33 +163,52 @@ def transform_html(html: str, embolden=tuple()) -> str:
         group_refs_by_year(soup)
 
     # Return full document
-    return str(soup)
+    return soup
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("input_html", help="Path to input .html file")
     ap.add_argument("--bold", "-b", type=argparse.FileType('r'), help="Line-delineated text file of authors to highlight.")
-    ap.add_argument("--resize-js", action="store_true", help="Include JavaScript to resize the window to fit content (for use in popups/iframes)")
+    ap.add_argument("--rm-html-body", action="store_true", help="Remove <html> and <body> tags from output (for embedding in other pages)")
     ap.add_argument("-o", "--output", default=None, help="Path to output .html file (default: stdout)")
     args = ap.parse_args()
 
     bold_authors = []
-    for line in args.bold:
-        line = line.strip()
-        if line:
-            bold_authors.append(line.strip())
+    if args.bold:
+        for line in args.bold:
+            line = line.strip()
+            if line:
+                bold_authors.append(line.strip())
 
     with open(args.input_html, "r", encoding="utf-8") as f:
         html = f.read()
 
-    out = transform_html(html, embolden=tuple(bold_authors))
+    soup = transform_html(html, embolden=tuple(bold_authors))
 
+    if args.rm_html_body:
+        if soup.body:
+            soup.body.unwrap()
+        if soup.html:
+            soup.html.unwrap()
+        if top_div:= soup.find("div"):
+            top_div.unwrap()
+
+    # soup as string and remove blank lines
+    html_str = soup.decode(formatter="minimal")
+    html_str = "\n".join(
+        line for line in html_str.splitlines()
+        if line.strip() )
+    if html_str.startswith('<h2>'):
+        html_str = '<h2>' + html_str[4:].replace("<h2>", "\n<h2>").replace('</h2>',"</h2>\n")
+        html_str = html_str.replace("<p>", "  <p>")
+
+    # output result
     if args.output:
         with open(args.output, "w", encoding="utf-8") as f:
-            f.write(out)
+            f.write(html_str)
     else:
-        print(out)
+        print(html_str)
 
 
 if __name__ == "__main__":
