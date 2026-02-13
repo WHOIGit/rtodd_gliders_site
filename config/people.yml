@@ -1,26 +1,72 @@
-current_team:
+current_members:
   - name: Robert E. Todd
     role: Associate Scientist, Principal Investigator
-    url: ...
-    email: ...
-    description: ...
+    image:
+    blurb:
+    email:
+    website:
+
   - name: Patrick Deane
     role: Engineer II
+    image:
+    blurb:
+    email:
+    website:
+
   - name: Edie Salzig
     role: Engineering Assistant II
+    image:
+    blurb:
+    email:
+    website:
+
   - name: Alice S. Ren
     role: Postdoctoral Investigator
+    image:
+    blurb:
+    email:
+    website:
 
-previously:
+
+previous_members:
   - name: Breck Owens
     role: Emeritus Research Scholar
+    image:
+    blurb:
+    email:
+    website:
+
   - name: Larry George
     role: Engineer II
+    image:
+    blurb:
+    email:
+    website:
+
   - name: Julie Jakoboski
     role: MIT-WHOI Joint Program Student
+    image:
+    blurb:
+    email:
+    website:
+
   - name: Joleen Heiderich
     role: MIT-WHOI Joint Program Student
+    image:
+    blurb:
+    email:
+    website:
+
   - name: Kyle R. Kausch
     role: MIT-WHOI Joint Program Student
+    image:
+    blurb:
+    email:
+    website:
+
   - name: Devon Gaynes
     role: Summer Student Fellow
+    image:
+    blurb:
+    email:
+    website:

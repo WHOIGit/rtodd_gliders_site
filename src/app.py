@@ -7,7 +7,9 @@ import dash_bootstrap_components as dbc
 from layout import create_layout
 from names import *
 
-external_stylesheets = [dbc.themes.BOOTSTRAP]
+external_stylesheets = [dbc.themes.BOOTSTRAP,
+    "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css",
+    ]
 
 dash_kwargs = {
     "use_pages": True,
