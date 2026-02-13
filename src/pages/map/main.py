@@ -359,7 +359,7 @@ def update_map(store_data, time_range, uv_scale, region_key):
     return fig
 
 def source_version():
-    gdl = GliderDataLoader(data_dir=Path("../data"))
+    gdl = GliderDataLoader(data_dir=Path("./data"))
     latest_mtime = gdl.latest_filemodified_timestamp()
     #print(latest_mtime, type(latest_mtime))
     return latest_mtime
@@ -373,7 +373,7 @@ def load_mapdata_from_source():
       "uv_records": { "<sn>": [ {"lat":..., "lon":..., "time":..., "u":..., "v":...}, ... ], ... },
     }
     """
-    gdl = GliderDataLoader(data_dir=Path("../data"))
+    gdl = GliderDataLoader(data_dir=Path("./data"))
     gdl.load_glider_json()
     latlon_records, uv_records = {}, {}
     for sn in gdl.glider_sns():

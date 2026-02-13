@@ -2,10 +2,9 @@ from pathlib import Path
 
 from dash import html, dcc
 
-ASSETS_DIR = Path.cwd() / "assets"
 
-def make_layout(asset: str = "publications.html") -> html.Div:
-    html_text = (ASSETS_DIR / asset).read_text(encoding="utf-8")
+def make_layout(html_file: str) -> html.Div:
+    html_text = (Path.cwd() / html_file).read_text(encoding="utf-8")
     return html.Div(
         [
             html.H1("Publications", style={"textAlign": "center", "marginBottom": "40px"}),
@@ -19,4 +18,4 @@ def make_layout(asset: str = "publications.html") -> html.Div:
         style={"padding": "40px 20px"},
     )
 
-layout = make_layout()
+layout = make_layout("config/publications.html")

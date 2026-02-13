@@ -15,7 +15,6 @@ import dash_bootstrap_components as dbc
 # - Ensure you have a default image in assets/, e.g. assets/default-person.png
 
 
-ASSETS_DIR = Path(__file__).resolve().parent / "assets"  # adjust if needed
 DEFAULT_IMAGE = "people/default.jpg"  # must exist in assets/
 
 
@@ -45,7 +44,7 @@ def _pick_image(image_field: Optional[str]) -> str:
 
     # Try to verify existence on disk.
     img_path = str(image_field).lstrip("/")
-    img_path = ASSETS_DIR / img_path
+    img_path = Path('assets') / img_path
     if img_path.exists():
         return _asset_url(img_path)
     return _asset_url(DEFAULT_IMAGE)
@@ -176,4 +175,4 @@ def make_people_layout(yaml_path: str | Path) -> dbc.Container:
 
 
 # Example export for Dash Pages:
-layout = make_people_layout("../config/people.yml")
+layout = make_people_layout("config/people.yml")

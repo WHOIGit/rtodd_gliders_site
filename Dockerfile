@@ -19,8 +19,5 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 # Copy application code
 COPY src/ /app/src/
 
-# Dash typically runs on 8050
-#EXPOSE 8050
-
-WORKDIR /app/src
-CMD ["gunicorn", "-b", "0.0.0.0:8050", "app:server"]
+ENV PYTHONPATH=/app/src
+CMD ["gunicorn", "-b", "0.0.0.0:8050", "src.app:server"]
