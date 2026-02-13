@@ -1,6 +1,9 @@
 current_team:
   - name: Robert E. Todd
     role: Associate Scientist, Principal Investigator
+    url: ...
+    email: ...
+    description: ...
   - name: Patrick Deane
     role: Engineer II
   - name: Edie Salzig

@@ -26,7 +26,7 @@ def _prev_person_block(name: str, role: str, *, bottom_margin: str = "mb-2"):
     )
 
 
-def make_layout(yml_path: str | Path = "../config/people.yml"):
+def make_layout(yml_path: str | Path = "config/people.yml"):
     """Return the layout for the People page, built from a YAML template."""
     yml_path = Path(yml_path)
 
@@ -96,5 +96,5 @@ def make_layout(yml_path: str | Path = "../config/people.yml"):
 
 
 # Expose a layout object that main.py imports
-layout = make_layout()
+layout = make_layout('../config/people.yml')
 
