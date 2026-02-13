@@ -1,19 +1,42 @@
+import dash
 from dash import html
-import dash_bootstrap_components as dbc
+
+app = dash.get_app()
 
 
-def make_layout():
-    """Return the layout for Page 1."""
-    return dbc.Container(
+def make_layout(asset: str = "publications.html") -> html.Div:
+    src = app.get_asset_url(asset)
+
+    return html.Div(
         [
-            html.H1("Publications", className="mb-4"),
-            html.P("This is a starter layout template for PUBLICATIONS"),
-            # Add your components here...
+            html.H1(
+                "Publications",
+                style={
+                    "textAlign": "center",
+                    "marginBottom": "40px",
+                },
+            ),
+            html.Div(
+                html.Iframe(
+                    id="publications-iframe",
+                    src=src,
+                    style={
+                        "height": "1000px",
+                        "width": "100%",
+                        "maxWidth": "800px",
+                        "border": "none",
+                    },
+                ),
+                style={
+                    "display": "flex",
+                    "justifyContent": "center",
+                },
+            ),
         ],
-        fluid=True,
+        style={
+            "padding": "40px 20px",
+        },
     )
 
 
-# Expose a layout object that main.py imports
 layout = make_layout()
-
