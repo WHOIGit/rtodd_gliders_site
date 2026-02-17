@@ -1,7 +1,9 @@
+import os
 from pathlib import Path
 
 from dash import html, dcc
 
+PUBLICATIONS_HTML_PATH = os.environ.get("PUBLICATIONS_HTML_PATH", "config/publications.html")
 
 def make_layout(html_file: str) -> html.Div:
     html_text = (Path.cwd() / html_file).read_text(encoding="utf-8")
@@ -18,4 +20,4 @@ def make_layout(html_file: str) -> html.Div:
         style={"padding": "40px 20px"},
     )
 
-layout = make_layout("config/publications.html")
+layout = make_layout(PUBLICATIONS_HTML_PATH)

@@ -1,6 +1,7 @@
 # people_page.py
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -15,7 +16,9 @@ import dash_bootstrap_components as dbc
 # - Ensure you have a default image in assets/, e.g. assets/default-person.png
 
 
-DEFAULT_IMAGE = "people/default.jpg"  # must exist in assets/
+PORTRAITS_DIR = Path(os.environ.get("PORTRAITS_DIR", "config/people-imgs")).resolve()
+PORTRAITS_URL_PREFIX = os.environ.get("PORTRAITS_DIR", "/people/img/")
+DEFAULT_IMAGE = os.environ.get("PORTRAITS_DEFAULT", "default.jpg")
 
 
 def load_people_yaml(yaml_path: str | Path) -> Dict[str, Any]:
@@ -30,8 +33,11 @@ def load_people_yaml(yaml_path: str | Path) -> Dict[str, Any]:
 
 def _asset_url(filename: str) -> str:
     # Dash assets: /assets/<filename> (respects requests_pathname_prefix)
-    app = dash.get_app()
-    return app.get_asset_url(filename)
+    app_prefix = dash.get_app().config['requests_pathname_prefix']
+    filepath = app_prefix[:-1] + PORTRAITS_URL_PREFIX + filename
+    return filepath
+    # app = dash.get_app()
+    # return app.get_asset_url(filename)
 
 
 def _pick_image(image_field: Optional[str]) -> str:
@@ -44,8 +50,7 @@ def _pick_image(image_field: Optional[str]) -> str:
 
     # Try to verify existence on disk.
     img_path = str(image_field).lstrip("/")
-    img_path = Path('assets') / img_path
-    if img_path.exists():
+    if (PORTRAITS_DIR / img_path).exists():
         return _asset_url(img_path)
     return _asset_url(DEFAULT_IMAGE)
 
