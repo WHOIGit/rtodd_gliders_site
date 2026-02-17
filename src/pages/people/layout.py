@@ -36,8 +36,6 @@ def _asset_url(filename: str) -> str:
     app_prefix = dash.get_app().config['requests_pathname_prefix']
     filepath = app_prefix[:-1] + PORTRAITS_URL_PREFIX + filename
     return filepath
-    # app = dash.get_app()
-    # return app.get_asset_url(filename)
 
 
 def _pick_image(image_field: Optional[str]) -> str:
