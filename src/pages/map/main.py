@@ -4,7 +4,7 @@ import datetime as dt
 from pathlib import Path
 
 import dash
-from dash import Input, Output, State, no_update, clientside_callback
+from dash import Input, Output, State, no_update, html, clientside_callback
 import numpy as np
 
 import plotly.graph_objects as go
@@ -182,7 +182,7 @@ def update_map(store_data, time_range, uv_scale, region_key):
         legendgroup = f"SN {glider_sn}"
 
         df = pd.DataFrame(records)
-        df['dt'] = pd.to_datetime(df.time, unit='s')
+        df['dt'] = df.time.apply(lambda x: pd.NaT if np.isnan(x) else dt.datetime.utcfromtimestamp(x/1))
         if df.empty or not {"lat", "lon"}.issubset(df.columns):
             continue
 
@@ -466,18 +466,45 @@ def set_glider_options(store_data):
 def populate_section_details(glider_sn, section_num, store_data):
     if not glider_sn or section_num is None:
         return "Select a glider and section to see details."
-
     store_data = store_data or {}
+    # dict_keys(['latlon_records', 'uv_records'])
+
+    url_realtime_pattern = 'https://gliders.whoi.edu/data/realtime/{:04d}.html'
+    url_pattern = 'https://gliders.whoi.edu/data/figs/realtime/{SN:04d}/{KEY}_{SECTION}.png'
+
+    static_charts = dict(
+        map="Map",
+        TS="T-S",
+        theta="Theta",
+        s="Salinity",
+        fl="Fluorescence",
+        oxumolkg="Oxygen (umol/kg)",
+        ph="pH",
+        c="Conductivity",
+    )
+
+    def img_block(series):
+        url = url_pattern.format(SN=int(glider_sn), KEY=series, SECTION=section_num)
+        block = html.Div([
+            html.H4(static_charts[series]),
+            html.Img(src=url, style={"width": "100%", "max-width": "300px", "margin-top": "10px"})
+        ], style={"margin-bottom": "20px"})
+        return block
+
+    images = [img_block(key) for key in static_charts.keys()]
 
     # TEMPLATE: replace with real lookup
     # Example text:
-    return (
-        f"Glider: SN {glider_sn}\n"
-        f"Section: {section_num}\n\n"
-        "Details:\n"
-        f"- {store_data.keys()}\n"
-        "- …\n"
-    )
+    details = html.Div([
+        html.A(url_realtime_pattern.format(int(glider_sn)).replace('https://',''), href=url_realtime_pattern.format(int(glider_sn))),
+        html.Br(),
+        # html.P(['Glider: ',
+        #         html.A(f"SN {glider_sn}", href=f"https://gliders.whoi.edu/data/realtime/{int(glider_sn):04d}.html"),
+        #         '  Section: ',
+        #         html.Strong(section_num)]),
+        *images
+    ])
+    return details
 
 def get_sections_for_glider(store_data, glider_sn):
     # TEMPLATE: replace with your real source.

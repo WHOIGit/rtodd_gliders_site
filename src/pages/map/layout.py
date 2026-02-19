@@ -151,7 +151,7 @@ def section_details_div():
                 className="mt-3 small",
                 style={
                     "whiteSpace": "pre-wrap",
-                    "maxHeight": "180px",
+                    "maxHeight": "50vh",
                     "overflowY": "auto",
                     "border": "1px solid rgba(0,0,0,0.1)",
                     "borderRadius": "6px",
