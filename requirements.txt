@@ -1,6 +1,6 @@
-dash
-pandas
-dash-bootstrap-components
-gunicorn
-PyYAML
-beautifulsoup4
+dash~=4.0.0
+pandas~=2.3.3
+dash-bootstrap-components~=2.0.4
+gunicorn~=25.1.0
+PyYAML~=6.0.3
+beautifulsoup4~=4.14.3
