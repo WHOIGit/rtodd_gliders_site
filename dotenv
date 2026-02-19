@@ -1,0 +1,5 @@
+PROD=1
+DEBUG=0
+
+PORTRAITS_DEFAULT=default.jpg
+PUBLICATIONS_HTML_PATH=config/publications.html

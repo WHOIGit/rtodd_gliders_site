@@ -473,7 +473,7 @@ def populate_section_details(glider_sn, section_num, store_data):
     url_pattern = 'https://gliders.whoi.edu/data/figs/realtime/{SN:04d}/{KEY}_{SECTION}.png'
 
     static_charts = dict(
-        map="Map",
+        map="Section Map",
         TS="T-S",
         theta="Theta",
         s="Salinity",

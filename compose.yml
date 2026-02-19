@@ -9,8 +9,6 @@ services:
     restart: unless-stopped
     environment:
       - PYTHONUNBUFFERED=1
-      - PROD=1
-      - DEBUG=0
 
     volumes:
       - ./data:/app/data:ro

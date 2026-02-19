@@ -16,8 +16,8 @@ import dash_bootstrap_components as dbc
 # - Ensure you have a default image in assets/, e.g. assets/default-person.png
 
 
-PORTRAITS_DIR = Path(os.environ.get("PORTRAITS_DIR", "config/people-imgs")).resolve()
-PORTRAITS_URL_PREFIX = os.environ.get("PORTRAITS_DIR", "/people/img/")
+PORTRAITS_DIR = Path("config/people-imgs").resolve()
+PORTRAITS_URL_PREFIX = "/people/img/"
 DEFAULT_IMAGE = os.environ.get("PORTRAITS_DEFAULT", "default.jpg")
 
 

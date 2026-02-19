@@ -42,8 +42,8 @@ app.layout = create_layout
 
 server = app.server
 
-PORTRAITS_DIR = Path(os.environ.get("PORTRAITS_DIR", "config/people-imgs")).resolve()
-PORTRAITS_URL_PREFIX = os.environ.get("PORTRAITS_DIR", "/people/img/")
+PORTRAITS_DIR = Path("config/people-imgs").resolve()
+PORTRAITS_URL_PREFIX = "/people/img/"
 
 # Optional: only allow typical image extensions
 ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
