@@ -1,32 +1,24 @@
 current_members:
   - name: Robert E. Todd
     role: Associate Scientist, Principal Investigator
-    image:
+    image: rtodd.jpg
     blurb:
-    email:
-    website:
+    email: rtodd@whoi.edu
+    website: https://rtodd.whoi.edu
 
   - name: Patrick Deane
     role: Engineer II
     image:
     blurb:
-    email:
+    email: pdeane@whoi.edu
     website:
 
   - name: Edie Salzig
     role: Engineering Assistant II
     image:
     blurb:
-    email:
+    email: eden.salzig@whoi.edu
     website:
-
-  - name: Alice S. Ren
-    role: Postdoctoral Investigator
-    image:
-    blurb:
-    email:
-    website:
-
 
 previous_members:
   - name: Breck Owens
@@ -59,6 +51,13 @@ previous_members:
 
   - name: Kyle R. Kausch
     role: MIT-WHOI Joint Program Student
+    image:
+    blurb:
+    email:
+    website:
+
+  - name: Alice S. Ren
+    role: Postdoctoral Investigator
     image:
     blurb:
     email:
