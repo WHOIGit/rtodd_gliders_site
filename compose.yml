@@ -3,17 +3,17 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: dash-app
+    container_name: gliderapp
     ports:
       - "8050:8050"
     restart: unless-stopped
     environment:
       - PYTHONUNBUFFERED=1
-      - PROD=0
-      - DEBUG=1
+      - PROD=1
+      - DEBUG=0
 
     volumes:
       - ./data:/app/data:ro
       - ./config:/app/config:ro
-      - ./src:/app/src:ro
+    #  - ./src:/app/src:ro
     # uncomment for local development
