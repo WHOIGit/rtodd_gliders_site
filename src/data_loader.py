@@ -18,15 +18,26 @@ class GliderDataLoader:
         self.glider_jsons = dict()
         self.selected_files = []
         self.section_ranges = dict()
+        self.active_sns = None
+        self.load_active2()
         self.load_secsactive2()
 
     def files_available(self):
         if not self.data_dir.exists():
             return []
-        return sorted(
-            f.name for f in self.data_dir.iterdir()
-            if f.is_file() and f.suffix.lower() == ".json"
-        )
+        files = []
+        for f in sorted(self.data_dir.iterdir()):
+            if not (f.is_file() and f.suffix.lower() == ".json"):
+                continue
+            if self.active_sns is not None:
+                try:
+                    sn = int(f.name.split('_')[0])
+                except ValueError:
+                    continue
+                if sn not in self.active_sns:
+                    continue
+            files.append(f.name)
+        return files
 
     def set_selected_files(self, filenames: list[str]):
         self.selected_files = []
@@ -63,6 +74,15 @@ class GliderDataLoader:
             for f in self.selected_files:
                 self.load_glider_json(f, force=force)
 
+    def load_active2(self):
+        path = self.data_dir / 'active2.csv'
+        if not path.exists():
+            self.active_sns = None
+            return
+        df = pd.read_csv(path, header=None, usecols=[0, 3],
+                         names=["sn", "active"], dtype={"sn": int, "active": int})
+        self.active_sns = set(df.loc[df["active"] == 1, "sn"])
+
     def load_secsactive2(self):
         """
         Returns dict:
@@ -83,6 +103,8 @@ class GliderDataLoader:
 
         self.section_ranges = {}
         for sn, g in df.groupby("sn", sort=False):
+            if self.active_sns is not None and sn not in self.active_sns:
+                continue
             self.section_ranges[sn] = [(int(r.start), float(r.end)) for r in g.itertuples(index=False)]
 
     def glider_sns(self):
