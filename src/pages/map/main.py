@@ -151,23 +151,7 @@ REGION_PRESETS = {
     "gulfstream": {"center": {"lat": 35.0, "lon": -65.0}, "zoom": 4.2},
 }
 
-@app.callback(
-    Output(MapIds.GRAPH, "figure"),
-    Input(StoreIds.MAPDATA_STORE, "data"),
-    Input(StoreIds.TIMERANGE_STORE, "data"),
-    Input(ControlIds.UV_SCALE, "value"),
-    Input(ControlIds.REGION_SELECT, "value"),
-    prevent_initial_call=False,
-)
-def update_map(store_data, time_range, uv_scale, region_key):
-
-    store_data = store_data or {}
-    latlon_records = store_data.get("latlon_records", {})
-    uv_records = store_data.get("uv_records", {})
-
-    if not latlon_records:
-        return blank_map()
-
+def _build_map_fig(latlon_records, uv_records, time_range, uv_scale, region_key):
     COLOR_CYCLE = cycle([
         ( 31, 119, 180), # blue
         (255, 127,  14), # orange
@@ -242,30 +226,6 @@ def update_map(store_data, time_range, uv_scale, region_key):
                 )
             )
 
-        # df['datetimestr'] = pd.to_datetime(df.time, unit='s').dt.strftime('%Y-%m-%d %H:%M:%S')
-        # customdata = [[glider_sn, int(section), datestr.split()[0], datestr.split()[1]] for datestr, section in zip(df.datetimestr, df.section)]
-        #
-        # # add trace for this glider
-        # fig.add_trace(go.Scattermap(
-        #     lat=df["lat"],
-        #     lon=df["lon"],
-        #     mode="markers+lines",
-        #     name=f"SN {glider_sn}",
-        #     legendgroup = legendgroup,
-        #     marker=dict(size=6, color=color),
-        #     line=dict(width=3, color=color),
-        #     hovertemplate=(
-        #         "<b>Glider %{customdata[0]}</b><br>"
-        #         "Lat: %{lat}<br>"
-        #         "Lon: %{lon}<br>"
-        #         "Date: %{customdata[2]}<br>"
-        #         "Time: %{customdata[3]}<br>"
-        #         "Section: %{customdata[1]}"
-        #         "<extra></extra>"
-        #     ),
-        #     customdata=customdata,
-        # ))
-
         # add u,v vectors if available
         if uv_records and glider_sn in uv_records:
             uv_recs = uv_records[glider_sn]
@@ -325,10 +285,7 @@ def update_map(store_data, time_range, uv_scale, region_key):
         ))
 
     if not fig.data:
-        if time_range:
-            logger.info("update_map: no data in time range, retrying with full time range")
-            return update_map(store_data, None, uv_scale, region_key)
-        return blank_map()
+        return fig
 
     # Set Center and Zoom
     if region_key == 'auto':
@@ -339,7 +296,6 @@ def update_map(store_data, time_range, uv_scale, region_key):
         region_preset = REGION_PRESETS.get(region_key, REGION_PRESETS["global"])
         center = region_preset["center"]
         zoom = region_preset["zoom"]
-    #print(region_key, center, zoom)
 
     legend_layout = dict(
         x=0.99,
@@ -363,6 +319,44 @@ def update_map(store_data, time_range, uv_scale, region_key):
     )
 
     return fig
+
+
+@app.callback(
+    Output(MapIds.GRAPH, "figure"),
+    Output(AlertIds.BANNER, "is_open"),
+    Output(AlertIds.BANNER, "children"),
+    Input(StoreIds.MAPDATA_STORE, "data"),
+    Input(StoreIds.TIMERANGE_STORE, "data"),
+    Input(ControlIds.UV_SCALE, "value"),
+    Input(ControlIds.REGION_SELECT, "value"),
+    prevent_initial_call=False,
+)
+def update_map(store_data, time_range, uv_scale, region_key):
+    store_data = store_data or {}
+    latlon_records = store_data.get("latlon_records", {})
+    uv_records = store_data.get("uv_records", {})
+
+    if not latlon_records:
+        return blank_map(), False, ""
+
+    fig = _build_map_fig(latlon_records, uv_records, time_range, uv_scale, region_key)
+
+    if not fig.data:
+        if time_range:
+            start, end = time_range
+            window = end - start
+            last_ts = max(
+                r["time"] for records in latlon_records.values()
+                for r in records if r.get("time") is not None and not np.isnan(r["time"])
+            )
+            shifted_range = [last_ts - window, last_ts]
+            fig = _build_map_fig(latlon_records, uv_records, shifted_range, uv_scale, region_key)
+            if fig.data:
+                last_dt = dt.datetime.utcfromtimestamp(last_ts).strftime("%Y-%m-%d")
+                return fig, True, f"No data found for the selected time range. Showing the same time window ending at the last available data ({last_dt})."
+        return blank_map(), False, ""
+
+    return fig, False, ""
 
 def source_version():
     gdl = GliderDataLoader(data_dir=Path("./data"))
@@ -416,7 +410,6 @@ def default_timerange_seconds(days_back=7):
     prevent_initial_call=False,   # run on first load
 )
 def init_mapdata_on_session(pathname, init_state):
-    # Normalize
     version = source_version()
     #print("MAP PAGE: session init, is initialized?", init_state, version)
 

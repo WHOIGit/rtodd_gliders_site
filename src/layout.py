@@ -54,6 +54,23 @@ def make_navbar() -> dbc.Navbar:
 
 
 def create_layout():
+    alert_banner = dbc.Alert(
+        "",
+        id=AlertIds.BANNER,
+        color="warning",
+        dismissable=True,
+        is_open=False,
+        style={
+            "position": "fixed",
+            "top": "60px",
+            "left": "50%",
+            "transform": "translateX(-50%)",
+            "zIndex": 1050,
+            "minWidth": "350px",
+            "maxWidth": "80%",
+        },
+    )
+
     # instead of dash.page_container, we create our own container with flex-column and w-100
     pages_container = html.Div(
         [
@@ -70,6 +87,7 @@ def create_layout():
     layout = dbc.Container(
         [
             make_navbar(),
+            alert_banner,
             pages_container,
         ],
         fluid=True,
