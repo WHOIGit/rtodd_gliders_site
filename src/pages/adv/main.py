@@ -280,10 +280,20 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
     if df.empty:
         return {"records": [], "columns": []}, no_update, no_update, no_update, no_update
 
-    # Build axis field options
+    # Build axis field options with short_name labels
     exclude_cols = {"ndive", "glider_sn", "instrument", "phase"}
     available = [c for c in df.columns if c not in exclude_cols]
-    field_opts = [{"label": c, "value": c} for c in available]
+
+    inst_key = gdl.instruments()[instrument_name]['key']
+    raw_fields = gdl.glider_jsons[gdl.sn_to_filename(glider_sn)][inst_key]['info'].get('fields', {})
+    field_meta = {c: raw_fields.get(c, {}) for c in available}
+
+    def field_label(col):
+        meta = field_meta[col]
+        name = meta.get('short_name') or meta.get('units') or ''
+        return f"[{col}] {name}" if name else col
+
+    field_opts = [{"label": field_label(c), "value": c} for c in available]
 
     # Preserve current axis selections if still valid on range change, else use defaults
     is_single_dive = ndive_range and ndive_range[0] == ndive_range[1]
@@ -306,6 +316,7 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
     store = {
         "records": df.to_dict("records"),
         "columns": list(df.columns),
+        "field_meta": field_meta,
     }
 
     return store, field_opts, x_default, field_opts, y_default
@@ -389,9 +400,20 @@ def update_data_plot(inst_store, x_col, y_col, selection):
         ),
     ))
 
+    def axis_title(col):
+        meta = inst_store.get("field_meta", {}).get(col, {})
+        short = meta.get('short_name', '')
+        units = meta.get('units', '')
+        name = short or units
+        if name and units and short:
+            return f"[{col}] {name} ({units})"
+        elif name:
+            return f"[{col}] {name}"
+        return col
+
     fig.update_layout(
-        xaxis_title=x_col,
-        yaxis_title=y_col,
+        xaxis_title=axis_title(x_col),
+        yaxis_title=axis_title(y_col),
         margin=dict(l=60, r=20, t=30, b=50),
     )
 
