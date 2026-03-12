@@ -168,10 +168,14 @@ def _plot_area():
         is_open=True,
     )
 
-    data_plot = dcc.Graph(
-        id=AdvGraphIds.DATA_PLOT,
-        style={"height": "60vh", "minHeight": "400px"},
-        config={"displayModeBar": True, "responsive": True},
+    data_plot = dcc.Loading(
+        id="adv-data-plot-loading",
+        type="circle",
+        children=dcc.Graph(
+            id=AdvGraphIds.DATA_PLOT,
+            style={"height": "60vh", "minHeight": "400px"},
+            config={"displayModeBar": True, "responsive": True},
+        ),
     )
 
     return html.Div([minimap_toggle, minimap, data_plot])

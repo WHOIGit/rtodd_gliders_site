@@ -193,10 +193,16 @@ def main_layout():
     daysago = 30
     start = now - daysago * 24 * 60 * 60
 
-    map_div = dcc.Graph(
-        id=MapIds.GRAPH,
-        style={"height": "100%", "width": "100%"},
-        config={"displayModeBar": True,"responsive": True},
+    map_div = dcc.Loading(
+        id="map-loading",
+        type="circle",
+        children=dcc.Graph(
+            id=MapIds.GRAPH,
+            style={"height": "100%", "width": "100%"},
+            config={"displayModeBar": True, "responsive": True},
+        ),
+        parent_className="flex-grow-1 d-flex flex-column",
+        parent_style={"minHeight": 0},
     )
 
     return html.Div(
