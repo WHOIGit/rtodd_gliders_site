@@ -105,6 +105,28 @@ def toggle_range_mode(mode):
 
 
 # ---------------------------------------------------------------------------
+# Callback 2a: Dive prev/next buttons
+# ---------------------------------------------------------------------------
+@app.callback(
+    Output(AdvControlIds.DIVE_INPUT, "value", allow_duplicate=True),
+    Input(AdvControlIds.DIVE_PREV, "n_clicks"),
+    Input(AdvControlIds.DIVE_NEXT, "n_clicks"),
+    State(AdvControlIds.DIVE_INPUT, "value"),
+    State(AdvControlIds.DIVE_INPUT, "min"),
+    State(AdvControlIds.DIVE_INPUT, "max"),
+    State(AdvStoreIds.GLIDER_DATA_STORE, "data"),
+    prevent_initial_call=True,
+)
+def step_dive(n_prev, n_next, current, min_val, max_val, glider_store):
+    if not glider_store:
+        raise PreventUpdate
+    max_dive = glider_store.get("max_dive", 1)
+    current = current if current is not None else max_dive
+    delta = -1 if dash.ctx.triggered_id == AdvControlIds.DIVE_PREV else 1
+    return max(1, min(max_dive, int(current) + delta))
+
+
+# ---------------------------------------------------------------------------
 # Callback 3a: Update cast filter options based on available phases
 # ---------------------------------------------------------------------------
 @app.callback(
@@ -196,9 +218,11 @@ def build_selection(mode, section_id, dive_num, cast_filter, glider_store):
     Input(AdvControlIds.INSTRUMENT_SELECT, "value"),
     Input(AdvStoreIds.SELECTION_STORE, "data"),
     State(AdvControlIds.GLIDER_SELECT, "value"),
+    State(AdvControlIds.X_AXIS_SELECT, "value"),
+    State(AdvControlIds.Y_AXIS_SELECT, "value"),
     prevent_initial_call=True,
 )
-def build_instrument_data(instrument_name, selection, glider_sn):
+def build_instrument_data(instrument_name, selection, glider_sn, current_x, current_y):
     if not instrument_name or not selection or not glider_sn:
         raise PreventUpdate
 
@@ -233,15 +257,22 @@ def build_instrument_data(instrument_name, selection, glider_sn):
     available = [c for c in df.columns if c not in exclude_cols]
     field_opts = [{"label": c, "value": c} for c in available]
 
-    # Axis defaults
-    if mode == "dive":
-        y_default = "depth" if "depth" in available else "time"
-        x_default = next(
-            (f for f in available if f not in ("time", "depth", "p")),
-            available[0],
-        )
+    # Preserve current axis selections if still valid, otherwise use defaults
+    triggered = dash.ctx.triggered_id
+    range_changed = triggered == AdvStoreIds.SELECTION_STORE
+
+    if range_changed and current_x in available:
+        x_default = current_x
+    elif mode == "dive":
+        x_default = next((f for f in available if f not in ("time", "depth", "p")), available[0])
     else:
         x_default = "time" if "time" in available else available[0]
+
+    if range_changed and current_y in available:
+        y_default = current_y
+    elif mode == "dive":
+        y_default = "depth" if "depth" in available else "time"
+    else:
         y_default = "depth" if "depth" in available else (available[1] if len(available) > 1 else available[0])
 
     store = {
@@ -289,13 +320,21 @@ def update_data_plot(inst_store, x_col, y_col, selection):
         color_col = df["ndive"]
         color_label = "ndive"
 
+    # Marker symbol: triangle-down for descent (phase==1), triangle-up for ascent
+    if "phase" in df.columns:
+        symbols = df["phase"].map(lambda p: "triangle-down" if p == 1 else "triangle-up").tolist()
+    else:
+        symbols = "circle"
+
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=x_data,
         y=y_data,
-        mode="markers",
+        mode="lines+markers",
+        line=dict(width=0.5, color="rgba(100,100,100,0.3)"),
         marker=dict(
-            size=4,
+            size=5,
+            symbol=symbols,
             color=color_col.astype(int),
             colorscale="Viridis",
             colorbar=dict(title=color_label),
@@ -417,8 +456,12 @@ def toggle_minimap(value):
 # ---------------------------------------------------------------------------
 @app.callback(
     Output(AdvControlIds.GLIDER_SELECT, "options"),
+    Output(AdvControlIds.GLIDER_SELECT, "value"),
     Input(AdvControlIds.GLIDER_SELECT, "id"),  # fires once on page load
 )
 def populate_glider_options(_):
     sns = sorted(gdl.glider_sns())
-    return [{"label": f"SG{sn:03d}", "value": sn} for sn in sns]
+    opts = [{"label": f"Spray2 {sn:03d}", "value": sn} for sn in sns]
+    mtimes = gdl.sn_mtimes()
+    most_recent = max(mtimes, key=mtimes.get) if mtimes else (sns[0] if sns else None)
+    return opts, most_recent

@@ -8,6 +8,8 @@ class AdvControlIds:
     RANGE_MODE = "adv-range-mode"
     SECTION_SELECT = "adv-section-select"
     DIVE_INPUT = "adv-dive-input"
+    DIVE_PREV = "adv-dive-prev"
+    DIVE_NEXT = "adv-dive-next"
     CAST_FILTER = "adv-cast-filter"
     INSTRUMENT_SELECT = "adv-instrument-select"
     X_AXIS_SELECT = "adv-x-axis-select"

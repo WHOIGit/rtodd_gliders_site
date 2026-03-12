@@ -54,16 +54,19 @@ class GliderDataLoader:
             self.load_glider_json(filename)
             self.selected_files.append(filename)
 
+    def sn_mtimes(self) -> Dict[int, float]:
+        """Return dict of {sn: file mtime} for all loaded gliders."""
+        result = {}
+        for filename, glider_json in self.glider_jsons.items():
+            sn = glider_json['sn']
+            result[sn] = (self.data_dir / filename).stat().st_mtime
+        return result
+
     def latest_filemodified_timestamp(self) -> str:
         """Return ISO timestamp of the most recently modified data file."""
-        latest_mtime = 0
-        for filename in self.files_available():
-            path = self.data_dir / filename
-            mtime = path.stat().st_mtime
-            if mtime > latest_mtime:
-                latest_mtime = mtime
-        latest_mtime = dt.datetime.fromtimestamp(latest_mtime).isoformat(timespec='seconds')
-        return latest_mtime
+        mtimes = self.sn_mtimes()
+        latest_mtime = max(mtimes.values()) if mtimes else 0
+        return dt.datetime.fromtimestamp(latest_mtime).isoformat(timespec='seconds')
 
     def load_glider_json(self, filename=None, force: bool = False) -> Optional[Dict[str, Any]]:
         """Load glider JSON file(s) into memory cache.

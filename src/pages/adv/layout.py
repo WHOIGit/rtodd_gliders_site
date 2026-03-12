@@ -51,13 +51,19 @@ def _controls_card():
             # Dive number input (hidden by default)
             html.Div(
                 [
-                    dcc.Input(
-                        id=AdvControlIds.DIVE_INPUT,
-                        type="number",
-                        min=1,
-                        placeholder="Dive #",
-                        className="form-control",
-                    ),
+                    dbc.InputGroup([
+                        dcc.Input(
+                            id=AdvControlIds.DIVE_INPUT,
+                            type="number",
+                            min=1,
+                            placeholder="Dive #",
+                            className="form-control text-center",
+                            style={"textAlign": "center"},
+                            debounce=True,
+                        ),
+                        dbc.Button("▲", id=AdvControlIds.DIVE_NEXT, color="secondary", outline=True, size="sm"),
+                        dbc.Button("▼", id=AdvControlIds.DIVE_PREV, color="secondary", outline=True, size="sm"),
+                    ]),
                 ],
                 id=AdvContainerIds.DIVE_CONTAINER,
                 style={"display": "none"},
