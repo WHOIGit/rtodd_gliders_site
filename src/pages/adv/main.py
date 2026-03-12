@@ -247,14 +247,17 @@ def update_cast_options(instrument_name, selection, glider_sn):
     Output(AdvControlIds.X_AXIS_SELECT, "value"),
     Output(AdvControlIds.Y_AXIS_SELECT, "options"),
     Output(AdvControlIds.Y_AXIS_SELECT, "value"),
+    Output(AdvControlIds.COLOR_SELECT, "options"),
+    Output(AdvControlIds.COLOR_SELECT, "value"),
     Input(AdvControlIds.INSTRUMENT_SELECT, "value"),
     Input(AdvStoreIds.SELECTION_STORE, "data"),
     State(AdvControlIds.GLIDER_SELECT, "value"),
     State(AdvControlIds.X_AXIS_SELECT, "value"),
     State(AdvControlIds.Y_AXIS_SELECT, "value"),
+    State(AdvControlIds.COLOR_SELECT, "value"),
     prevent_initial_call=True,
 )
-def build_instrument_data(instrument_name, selection, glider_sn, current_x, current_y):
+def build_instrument_data(instrument_name, selection, glider_sn, current_x, current_y, current_color):
     if not instrument_name or not selection or not glider_sn:
         raise PreventUpdate
 
@@ -278,7 +281,7 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
         raise PreventUpdate
 
     if df.empty:
-        return {"records": [], "columns": []}, no_update, no_update, no_update, no_update
+        return {"records": [], "columns": []}, no_update, no_update, no_update, no_update, no_update, no_update
 
     # Build axis field options with short_name labels
     exclude_cols = {"ndive", "glider_sn", "instrument", "phase"}
@@ -319,7 +322,11 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
         "field_meta": field_meta,
     }
 
-    return store, field_opts, x_default, field_opts, y_default
+    color_opts = [{"label": "ndive", "value": "ndive"}] + field_opts
+    color_values = {"ndive"} | {c["value"] for c in field_opts}
+    color_default = current_color if (range_changed and current_color in color_values) else "ndive"
+
+    return store, field_opts, x_default, field_opts, y_default, color_opts, color_default
 
 
 # ---------------------------------------------------------------------------
@@ -330,10 +337,11 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
     Input(AdvStoreIds.INSTRUMENT_DF_STORE, "data"),
     Input(AdvControlIds.X_AXIS_SELECT, "value"),
     Input(AdvControlIds.Y_AXIS_SELECT, "value"),
+    Input(AdvControlIds.COLOR_SELECT, "value"),
     State(AdvStoreIds.SELECTION_STORE, "data"),
     prevent_initial_call=True,
 )
-def update_data_plot(inst_store, x_col, y_col, selection):
+def update_data_plot(inst_store, x_col, y_col, color_col, selection):
     if not inst_store or not x_col or not y_col:
         raise PreventUpdate
 
@@ -362,16 +370,9 @@ def update_data_plot(inst_store, x_col, y_col, selection):
     x_data = df["time_dt"] if x_col == "time" and "time_dt" in df.columns else df[x_col]
     y_data = df["time_dt"] if y_col == "time" and "time_dt" in df.columns else df[y_col]
 
-    # Single-dive: color by phase; multi-dive: color by ndive
-    dive_range = selection.get("dive_range") if selection else None
-    is_single = dive_range and dive_range[0] == dive_range[1]
-
-    if is_single and "phase" in df.columns:
-        color_col = df["phase"]
-        color_label = "phase"
-    else:
-        color_col = df["ndive"]
-        color_label = "ndive"
+    color_field = color_col if (color_col and color_col in df.columns) else "ndive"
+    color_data = df[color_field]
+    color_label = color_field
 
     # Marker symbol: triangle-down for descent (phase==1), triangle-up for ascent
     if "phase" in df.columns:
@@ -388,9 +389,9 @@ def update_data_plot(inst_store, x_col, y_col, selection):
         marker=dict(
             size=5,
             symbol=symbols,
-            color=color_col.astype(int),
+            color=pd.to_numeric(color_data, errors="coerce"),
             colorscale="Viridis",
-            colorbar=dict(title=color_label),
+            colorbar=dict(title=color_label, thickness=14),
             showscale=True,
         ),
         hovertemplate=(

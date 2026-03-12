@@ -17,6 +17,7 @@ class AdvControlIds:
     INSTRUMENT_SELECT = "adv-instrument-select"
     X_AXIS_SELECT = "adv-x-axis-select"
     Y_AXIS_SELECT = "adv-y-axis-select"
+    COLOR_SELECT = "adv-color-select"
     MINIMAP_TOGGLE = "adv-minimap-toggle"
 
 class AdvGraphIds:

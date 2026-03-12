@@ -131,6 +131,14 @@ def _controls_card():
                 placeholder="Select field...",
                 clearable=False,
             ),
+            html.Label("Colorbar", className="fw-semibold mt-2 mb-1"),
+            dcc.Dropdown(
+                id=AdvControlIds.COLOR_SELECT,
+                options=[],
+                value=None,
+                placeholder="Select field...",
+                clearable=False,
+            ),
         ]),
     )
 
