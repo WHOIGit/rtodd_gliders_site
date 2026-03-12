@@ -322,6 +322,9 @@ def update_map(store_data, time_range, uv_scale, region_key):
         ))
 
     if not fig.data:
+        if time_range:
+            logger.info("update_map: no data in time range, retrying with full time range")
+            return update_map(store_data, None, uv_scale, region_key)
         return blank_map()
 
     # Set Center and Zoom
