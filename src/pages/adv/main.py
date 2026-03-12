@@ -1,4 +1,3 @@
-import datetime as dt
 from pathlib import Path
 
 import dash
@@ -44,6 +43,8 @@ _map_tile_layer = dict(
     Output(AdvControlIds.INSTRUMENT_SELECT, "options"),
     Output(AdvControlIds.INSTRUMENT_SELECT, "value"),
     Output(AdvControlIds.DIVE_INPUT, "max"),
+    Output(AdvControlIds.DIVE_INPUT, "value"),
+    Output(AdvControlIds.DIVE_INPUT, "placeholder"),
     Input(AdvControlIds.GLIDER_SELECT, "value"),
     prevent_initial_call=True,
 )
@@ -84,7 +85,7 @@ def on_glider_select(glider_sn):
         "track_records": track_df.to_dict("records"),
     }
 
-    return store_data, section_opts, section_default, inst_opts, inst_default, max_dive
+    return store_data, section_opts, section_default, inst_opts, inst_default, max_dive, max_dive, str(max_dive)
 
 
 # ---------------------------------------------------------------------------
@@ -93,18 +94,51 @@ def on_glider_select(glider_sn):
 @app.callback(
     Output(AdvContainerIds.SECTION_CONTAINER, "style"),
     Output(AdvContainerIds.DIVE_CONTAINER, "style"),
-    Output(AdvContainerIds.TIMESPAN_CONTAINER, "style"),
     Input(AdvControlIds.RANGE_MODE, "value"),
 )
 def toggle_range_mode(mode):
     show = {"display": "block"}
     hide = {"display": "none"}
-    if mode == "section":
-        return show, hide, hide
-    elif mode == "dive":
-        return hide, show, hide
-    else:  # timespan
-        return hide, hide, show
+    if mode == "dive":
+        return hide, show
+    return show, hide
+
+
+# ---------------------------------------------------------------------------
+# Callback 3a: Update cast filter options based on available phases
+# ---------------------------------------------------------------------------
+@app.callback(
+    Output(AdvControlIds.CAST_FILTER, "options"),
+    Input(AdvControlIds.INSTRUMENT_SELECT, "value"),
+    Input(AdvStoreIds.SELECTION_STORE, "data"),
+    State(AdvControlIds.GLIDER_SELECT, "value"),
+    prevent_initial_call=True,
+)
+def update_cast_options(instrument_name, selection, glider_sn):
+    _all_opts = [
+        {"label": "All", "value": "all"},
+        {"label": "Downcast", "value": "downcast"},
+        {"label": "Upcast", "value": "upcast"},
+    ]
+    if not instrument_name or not glider_sn or not selection:
+        return _all_opts
+
+    ndive_range = tuple(selection["dive_range"]) if selection.get("dive_range") else None
+    try:
+        df = gdl.build_instrument_df(int(glider_sn), instrument_name, ndive_range=ndive_range)
+    except (KeyError, ValueError):
+        return _all_opts
+
+    if df.empty or "phase" not in df.columns:
+        return _all_opts
+
+    has_down = (df["phase"] == 1).any()
+    has_up = (df["phase"] != 1).any()
+    return [
+        {"label": "All", "value": "all"},
+        {"label": "Downcast", "value": "downcast", "disabled": not has_down},
+        {"label": "Upcast", "value": "upcast", "disabled": not has_up},
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -115,22 +149,20 @@ def toggle_range_mode(mode):
     Input(AdvControlIds.RANGE_MODE, "value"),
     Input(AdvControlIds.SECTION_SELECT, "value"),
     Input(AdvControlIds.DIVE_INPUT, "value"),
-    Input(AdvControlIds.TIME_RANGE_PICKER, "start_date"),
-    Input(AdvControlIds.TIME_RANGE_PICKER, "end_date"),
     Input(AdvControlIds.CAST_FILTER, "value"),
     State(AdvStoreIds.GLIDER_DATA_STORE, "data"),
     prevent_initial_call=True,
 )
-def build_selection(mode, section_id, dive_num, time_start, time_end, cast_filter, glider_store):
+def build_selection(mode, section_id, dive_num, cast_filter, glider_store):
     if not glider_store:
         raise PreventUpdate
+
+    max_dive = glider_store.get("max_dive", 1)
 
     selection = {
         "mode": mode,
         "section": section_id,
         "dive": dive_num,
-        "time_start": None,
-        "time_end": None,
         "cast": cast_filter or "all",
         "dive_range": None,
     }
@@ -141,21 +173,13 @@ def build_selection(mode, section_id, dive_num, time_start, time_end, cast_filte
             if s["id"] == section_id:
                 end = s["end"]
                 if end is None or (isinstance(end, float) and np.isinf(end)):
-                    end = glider_store.get("max_dive", 99999)
+                    end = max_dive
                 selection["dive_range"] = [s["start"], int(end)]
                 break
 
-    elif mode == "dive" and dive_num is not None:
-        selection["dive_range"] = [int(dive_num), int(dive_num)]
-
-    elif mode == "timespan":
-        if time_start:
-            ts = dt.datetime.strptime(time_start[:10], "%Y-%m-%d").replace(tzinfo=dt.timezone.utc)
-            selection["time_start"] = ts.timestamp()
-        if time_end:
-            te = dt.datetime.strptime(time_end[:10], "%Y-%m-%d").replace(tzinfo=dt.timezone.utc)
-            te = te + dt.timedelta(days=1) - dt.timedelta(seconds=1)
-            selection["time_end"] = te.timestamp()
+    elif mode == "dive":
+        n = int(dive_num) if dive_num is not None else max_dive
+        selection["dive_range"] = [n, n]
 
     return selection
 
@@ -189,20 +213,13 @@ def build_instrument_data(instrument_name, selection, glider_sn):
 
     # Determine filters
     ndive_range = None
-    time_range = None
-    if mode in ("section", "dive") and selection.get("dive_range"):
+    if selection.get("dive_range"):
         ndive_range = tuple(selection["dive_range"])
-    elif mode == "timespan":
-        t_start = selection.get("time_start")
-        t_end = selection.get("time_end")
-        if t_start and t_end:
-            time_range = (t_start, t_end)
 
     try:
         df = gdl.build_instrument_df(
             glider_sn, instrument_name,
             ndive_range=ndive_range,
-            time_range=time_range,
             phase=phase_filter,
         )
     except (KeyError, ValueError):

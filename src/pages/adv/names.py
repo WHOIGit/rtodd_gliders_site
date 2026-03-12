@@ -8,7 +8,6 @@ class AdvControlIds:
     RANGE_MODE = "adv-range-mode"
     SECTION_SELECT = "adv-section-select"
     DIVE_INPUT = "adv-dive-input"
-    TIME_RANGE_PICKER = "adv-time-range-picker"
     CAST_FILTER = "adv-cast-filter"
     INSTRUMENT_SELECT = "adv-instrument-select"
     X_AXIS_SELECT = "adv-x-axis-select"
@@ -22,5 +21,4 @@ class AdvGraphIds:
 class AdvContainerIds:
     SECTION_CONTAINER = "adv-section-container"
     DIVE_CONTAINER = "adv-dive-container"
-    TIMESPAN_CONTAINER = "adv-timespan-container"
     MINIMAP_CARD = "adv-minimap-card"

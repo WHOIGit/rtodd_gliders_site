@@ -28,7 +28,6 @@ def _controls_card():
                 options=[
                     {"label": "Section", "value": "section"},
                     {"label": "Dive", "value": "dive"},
-                    {"label": "Time Span", "value": "timespan"},
                 ],
                 value="section",
                 inline=True,
@@ -61,22 +60,6 @@ def _controls_card():
                     ),
                 ],
                 id=AdvContainerIds.DIVE_CONTAINER,
-                style={"display": "none"},
-            ),
-
-            # Time span picker (hidden by default)
-            html.Div(
-                [
-                    dcc.DatePickerRange(
-                        id=AdvControlIds.TIME_RANGE_PICKER,
-                        minimum_nights=0,
-                        display_format="YYYY-MM-DD",
-                        start_date_placeholder_text="Start",
-                        end_date_placeholder_text="End",
-                        clearable=True,
-                    ),
-                ],
-                id=AdvContainerIds.TIMESPAN_CONTAINER,
                 style={"display": "none"},
             ),
 
