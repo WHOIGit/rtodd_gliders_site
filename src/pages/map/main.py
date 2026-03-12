@@ -139,7 +139,7 @@ def rgb_to_hex(r:int, g:int, b:int, a=None):
 def blank_map():
     fig = go.Figure()
     fig.add_trace(go.Scattermap())
-    fig.update_layout(map=map_fig_common_layout_kwargs)
+    fig.update_layout(map=map_fig_common_layout_kwargs, **map_margins)
     return fig
 
 # TODO config file
