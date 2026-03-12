@@ -278,7 +278,10 @@ class GliderDataLoader:
         for dive_num, times in zip(data['ndive'], data['time']):
             if dive_num is None: continue
             ndive_t0 = self.glider_ndive_t0(glider_sn, dive_num)
-            unixtimes = [t+ndive_t0 for t in times]
+            if ndive_t0 is None:
+                unixtimes = [None] * len(times)
+            else:
+                unixtimes = [t + ndive_t0 if t is not None else None for t in times]
             flat_data['time'].extend(unixtimes)
 
         nested_keys = [k for k in data.keys() if k not in ['info', 'ndive', 'time']]

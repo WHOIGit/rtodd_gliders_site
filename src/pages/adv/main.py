@@ -71,9 +71,15 @@ def on_glider_select(glider_sn):
     track_df = gdl.build_glider_df(glider_sn)
     max_dive = int(track_df["ndive"].max()) if not track_df.empty else 1
 
+    # JSON can't represent float('inf') — replace inf ends with max_dive before storing
+    sections_serializable = [
+        {**s, "end": max_dive if isinstance(s["end"], float) and np.isinf(s["end"]) else s["end"]}
+        for s in sections
+    ]
+
     store_data = {
         "sn": glider_sn,
-        "sections": sections,
+        "sections": sections_serializable,
         "max_dive": max_dive,
         "track_records": track_df.to_dict("records"),
     }
@@ -134,7 +140,7 @@ def build_selection(mode, section_id, dive_num, time_start, time_end, cast_filte
         for s in sections:
             if s["id"] == section_id:
                 end = s["end"]
-                if np.isinf(end):
+                if end is None or (isinstance(end, float) and np.isinf(end)):
                     end = glider_store.get("max_dive", 99999)
                 selection["dive_range"] = [s["start"], int(end)]
                 break
@@ -260,7 +266,7 @@ def update_data_plot(inst_store, x_col, y_col, selection):
 
     # Color by ndive for multi-dive, phase for single dive
     if mode == "dive" and "phase" in df.columns:
-        color_col = df["phase"].astype(str)
+        color_col = df["phase"]
         color_label = "phase"
     else:
         color_col = df["ndive"]
@@ -273,7 +279,7 @@ def update_data_plot(inst_store, x_col, y_col, selection):
         mode="markers",
         marker=dict(
             size=4,
-            color=color_col,
+            color=color_col.astype(int),
             colorscale="Viridis",
             colorbar=dict(title=color_label),
             showscale=True,
