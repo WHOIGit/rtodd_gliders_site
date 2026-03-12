@@ -1,6 +1,9 @@
 # app.py
+import logging
 import os
 from pathlib import Path
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 import dash
 import dash_bootstrap_components as dbc

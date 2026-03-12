@@ -1,7 +1,10 @@
 from itertools import cycle
+import logging
 import time
 import datetime as dt
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 import dash
 from dash import Input, Output, State, no_update, html, clientside_callback
