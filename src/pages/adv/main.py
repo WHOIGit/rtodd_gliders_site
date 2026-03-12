@@ -45,6 +45,9 @@ _map_tile_layer = dict(
     Output(AdvControlIds.DIVE_INPUT, "max"),
     Output(AdvControlIds.DIVE_INPUT, "value"),
     Output(AdvControlIds.DIVE_INPUT, "placeholder"),
+    Output(AdvControlIds.DIVE_INPUT2, "max"),
+    Output(AdvControlIds.DIVE_INPUT2, "value"),
+    Output(AdvControlIds.DIVE_INPUT2, "placeholder"),
     Input(AdvControlIds.GLIDER_SELECT, "value"),
     prevent_initial_call=True,
 )
@@ -57,7 +60,6 @@ def on_glider_select(glider_sn):
     # Section options
     sections = gdl.sections_for_glider(glider_sn)
     section_opts = [{"label": s["label"], "value": s["id"]} for s in sections]
-    section_default = sections[0]["id"] if sections else None
 
     # Instrument options
     all_instruments = gdl.instruments()
@@ -85,45 +87,118 @@ def on_glider_select(glider_sn):
         "track_records": track_df.to_dict("records"),
     }
 
-    return store_data, section_opts, section_default, inst_opts, inst_default, max_dive, max_dive, str(max_dive)
+    return (
+        store_data,
+        section_opts, None,
+        inst_opts, inst_default,
+        max_dive, max_dive, str(max_dive),
+        max_dive, None, str(max_dive),
+    )
 
 
 # ---------------------------------------------------------------------------
-# Callback 2: Range mode toggle
+# Callback 2: Range toggle → show/hide second dive input
 # ---------------------------------------------------------------------------
 @app.callback(
-    Output(AdvContainerIds.SECTION_CONTAINER, "style"),
-    Output(AdvContainerIds.DIVE_CONTAINER, "style"),
-    Input(AdvControlIds.RANGE_MODE, "value"),
+    Output(AdvContainerIds.DIVE_INPUT2_CONTAINER, "is_open"),
+    Input(AdvControlIds.RANGE_TOGGLE, "value"),
 )
-def toggle_range_mode(mode):
-    show = {"display": "block"}
-    hide = {"display": "none"}
-    if mode == "dive":
-        return hide, show
-    return show, hide
+def toggle_range(value):
+    return "range" in (value or [])
 
 
 # ---------------------------------------------------------------------------
-# Callback 2a: Dive prev/next buttons
+# Callback 2a: Dive prev/next buttons (input 1 and input 2)
 # ---------------------------------------------------------------------------
 @app.callback(
     Output(AdvControlIds.DIVE_INPUT, "value", allow_duplicate=True),
     Input(AdvControlIds.DIVE_PREV, "n_clicks"),
     Input(AdvControlIds.DIVE_NEXT, "n_clicks"),
     State(AdvControlIds.DIVE_INPUT, "value"),
-    State(AdvControlIds.DIVE_INPUT, "min"),
-    State(AdvControlIds.DIVE_INPUT, "max"),
     State(AdvStoreIds.GLIDER_DATA_STORE, "data"),
     prevent_initial_call=True,
 )
-def step_dive(n_prev, n_next, current, min_val, max_val, glider_store):
+def step_dive1(n_prev, n_next, current, glider_store):
     if not glider_store:
         raise PreventUpdate
     max_dive = glider_store.get("max_dive", 1)
     current = current if current is not None else max_dive
     delta = -1 if dash.ctx.triggered_id == AdvControlIds.DIVE_PREV else 1
     return max(1, min(max_dive, int(current) + delta))
+
+
+@app.callback(
+    Output(AdvControlIds.DIVE_INPUT2, "value", allow_duplicate=True),
+    Input(AdvControlIds.DIVE_PREV2, "n_clicks"),
+    Input(AdvControlIds.DIVE_NEXT2, "n_clicks"),
+    State(AdvControlIds.DIVE_INPUT2, "value"),
+    State(AdvStoreIds.GLIDER_DATA_STORE, "data"),
+    prevent_initial_call=True,
+)
+def step_dive2(n_prev, n_next, current, glider_store):
+    if not glider_store:
+        raise PreventUpdate
+    max_dive = glider_store.get("max_dive", 1)
+    current = current if current is not None else max_dive
+    delta = -1 if dash.ctx.triggered_id == AdvControlIds.DIVE_PREV2 else 1
+    return max(1, min(max_dive, int(current) + delta))
+
+
+# ---------------------------------------------------------------------------
+# Callback 2b: Section select → set dive input values + activate range mode
+# ---------------------------------------------------------------------------
+@app.callback(
+    Output(AdvControlIds.DIVE_INPUT, "value", allow_duplicate=True),
+    Output(AdvControlIds.DIVE_INPUT2, "value", allow_duplicate=True),
+    Output(AdvControlIds.RANGE_TOGGLE, "value"),
+    Input(AdvControlIds.SECTION_SELECT, "value"),
+    State(AdvStoreIds.GLIDER_DATA_STORE, "data"),
+    prevent_initial_call=True,
+)
+def apply_section(section_id, glider_store):
+    if not section_id or not glider_store:
+        raise PreventUpdate
+    sections = glider_store.get("sections", [])
+    for s in sections:
+        if s["id"] == section_id:
+            start = int(s["start"])
+            end = s["end"]
+            if end is None or (isinstance(end, float) and np.isinf(end)):
+                end = glider_store.get("max_dive", 99999)
+            return start, int(end), ["range"]
+    raise PreventUpdate
+
+
+# ---------------------------------------------------------------------------
+# Callback 3: Build selection store
+# ---------------------------------------------------------------------------
+@app.callback(
+    Output(AdvStoreIds.SELECTION_STORE, "data"),
+    Input(AdvControlIds.DIVE_INPUT, "value"),
+    Input(AdvControlIds.DIVE_INPUT2, "value"),
+    Input(AdvControlIds.CAST_FILTER, "value"),
+    State(AdvControlIds.RANGE_TOGGLE, "value"),
+    State(AdvStoreIds.GLIDER_DATA_STORE, "data"),
+    prevent_initial_call=True,
+)
+def build_selection(dive1, dive2, cast_filter, range_toggle, glider_store):
+    if not glider_store:
+        raise PreventUpdate
+
+    max_dive = glider_store.get("max_dive", 1)
+    n1 = int(dive1) if dive1 is not None else None
+    n2 = int(dive2) if dive2 is not None else None
+
+    if "range" in (range_toggle or []) and n1 is not None and n2 is not None:
+        dive_range = [min(n1, n2), max(n1, n2)]
+    else:
+        n = n1 if n1 is not None else (n2 if n2 is not None else max_dive)
+        dive_range = [n, n]
+
+    return {
+        "dive_range": dive_range,
+        "cast": cast_filter or "all",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -164,49 +239,6 @@ def update_cast_options(instrument_name, selection, glider_sn):
 
 
 # ---------------------------------------------------------------------------
-# Callback 3: Build selection store
-# ---------------------------------------------------------------------------
-@app.callback(
-    Output(AdvStoreIds.SELECTION_STORE, "data"),
-    Input(AdvControlIds.RANGE_MODE, "value"),
-    Input(AdvControlIds.SECTION_SELECT, "value"),
-    Input(AdvControlIds.DIVE_INPUT, "value"),
-    Input(AdvControlIds.CAST_FILTER, "value"),
-    State(AdvStoreIds.GLIDER_DATA_STORE, "data"),
-    prevent_initial_call=True,
-)
-def build_selection(mode, section_id, dive_num, cast_filter, glider_store):
-    if not glider_store:
-        raise PreventUpdate
-
-    max_dive = glider_store.get("max_dive", 1)
-
-    selection = {
-        "mode": mode,
-        "section": section_id,
-        "dive": dive_num,
-        "cast": cast_filter or "all",
-        "dive_range": None,
-    }
-
-    if mode == "section" and section_id is not None:
-        sections = glider_store.get("sections", [])
-        for s in sections:
-            if s["id"] == section_id:
-                end = s["end"]
-                if end is None or (isinstance(end, float) and np.isinf(end)):
-                    end = max_dive
-                selection["dive_range"] = [s["start"], int(end)]
-                break
-
-    elif mode == "dive":
-        n = int(dive_num) if dive_num is not None else max_dive
-        selection["dive_range"] = [n, n]
-
-    return selection
-
-
-# ---------------------------------------------------------------------------
 # Callback 4: Build instrument DataFrame + axis defaults
 # ---------------------------------------------------------------------------
 @app.callback(
@@ -227,7 +259,6 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
         raise PreventUpdate
 
     glider_sn = int(glider_sn)
-    mode = selection.get("mode", "section")
     cast = selection.get("cast", "all")
     phase_filter = None
     if cast == "downcast":
@@ -235,10 +266,7 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
     elif cast == "upcast":
         phase_filter = "ascent"
 
-    # Determine filters
-    ndive_range = None
-    if selection.get("dive_range"):
-        ndive_range = tuple(selection["dive_range"])
+    ndive_range = tuple(selection["dive_range"]) if selection.get("dive_range") else None
 
     try:
         df = gdl.build_instrument_df(
@@ -250,27 +278,27 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
         raise PreventUpdate
 
     if df.empty:
-        raise PreventUpdate
+        return {"records": [], "columns": []}, no_update, no_update, no_update, no_update
 
     # Build axis field options
     exclude_cols = {"ndive", "glider_sn", "instrument", "phase"}
     available = [c for c in df.columns if c not in exclude_cols]
     field_opts = [{"label": c, "value": c} for c in available]
 
-    # Preserve current axis selections if still valid, otherwise use defaults
-    triggered = dash.ctx.triggered_id
-    range_changed = triggered == AdvStoreIds.SELECTION_STORE
+    # Preserve current axis selections if still valid on range change, else use defaults
+    is_single_dive = ndive_range and ndive_range[0] == ndive_range[1]
+    range_changed = dash.ctx.triggered_id == AdvStoreIds.SELECTION_STORE
 
     if range_changed and current_x in available:
         x_default = current_x
-    elif mode == "dive":
+    elif is_single_dive:
         x_default = next((f for f in available if f not in ("time", "depth", "p")), available[0])
     else:
         x_default = "time" if "time" in available else available[0]
 
     if range_changed and current_y in available:
         y_default = current_y
-    elif mode == "dive":
+    elif is_single_dive:
         y_default = "depth" if "depth" in available else "time"
     else:
         y_default = "depth" if "depth" in available else (available[1] if len(available) > 1 else available[0])
@@ -300,9 +328,20 @@ def update_data_plot(inst_store, x_col, y_col, selection):
 
     df = pd.DataFrame(inst_store["records"])
     if df.empty:
-        raise PreventUpdate
-
-    mode = selection.get("mode", "section") if selection else "section"
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No Data",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5,
+            showarrow=False,
+            font=dict(size=24, color="grey"),
+        )
+        fig.update_layout(
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False),
+            margin=dict(l=60, r=20, t=30, b=50),
+        )
+        return fig
 
     # Convert time columns to datetime for display
     for col in (x_col, y_col):
@@ -312,8 +351,11 @@ def update_data_plot(inst_store, x_col, y_col, selection):
     x_data = df["time_dt"] if x_col == "time" and "time_dt" in df.columns else df[x_col]
     y_data = df["time_dt"] if y_col == "time" and "time_dt" in df.columns else df[y_col]
 
-    # Color by ndive for multi-dive, phase for single dive
-    if mode == "dive" and "phase" in df.columns:
+    # Single-dive: color by phase; multi-dive: color by ndive
+    dive_range = selection.get("dive_range") if selection else None
+    is_single = dive_range and dive_range[0] == dive_range[1]
+
+    if is_single and "phase" in df.columns:
         color_col = df["phase"]
         color_label = "phase"
     else:
@@ -353,7 +395,6 @@ def update_data_plot(inst_store, x_col, y_col, selection):
         margin=dict(l=60, r=20, t=30, b=50),
     )
 
-    # Reverse Y axis for depth (depth increases downward)
     if y_col == "depth":
         fig.update_yaxes(autorange="reversed")
 
@@ -376,7 +417,6 @@ def update_minimap(glider_store, selection):
     track = pd.DataFrame(glider_store["track_records"])
     fig = go.Figure()
 
-    # Full track in grey
     fig.add_trace(go.Scattermap(
         lat=track["lat"],
         lon=track["lon"],
@@ -386,7 +426,10 @@ def update_minimap(glider_store, selection):
         hoverinfo="skip",
     ))
 
-    # Highlight selected range
+    center_lat = track["lat"].dropna().mean() if not track["lat"].dropna().empty else 0
+    center_lon = track["lon"].dropna().mean() if not track["lon"].dropna().empty else 0
+    zoom = 4
+
     if selection and selection.get("dive_range"):
         start, end = selection["dive_range"]
         highlight = track[track["ndive"].between(start, end)]
@@ -404,8 +447,6 @@ def update_minimap(glider_store, selection):
                     "<extra></extra>"
                 ),
             ))
-
-            # Center on highlighted segment
             center_lat = (highlight["lat"].min() + highlight["lat"].max()) / 2
             center_lon = (highlight["lon"].min() + highlight["lon"].max()) / 2
             max_bound = max(
@@ -413,19 +454,6 @@ def update_minimap(glider_store, selection):
                 abs(highlight["lon"].max() - highlight["lon"].min()),
             ) * 111
             zoom = max(1, 12 - np.log(max(max_bound, 0.1)))
-        else:
-            center_lat = track["lat"].mean()
-            center_lon = track["lon"].mean()
-            zoom = 4
-    elif selection and selection.get("mode") == "timespan" and selection.get("time_start"):
-        # For timespan mode, highlight by time if no dive_range
-        center_lat = track["lat"].mean()
-        center_lon = track["lon"].mean()
-        zoom = 4
-    else:
-        center_lat = track["lat"].dropna().mean() if not track["lat"].dropna().empty else 0
-        center_lon = track["lon"].dropna().mean() if not track["lon"].dropna().empty else 0
-        zoom = 4
 
     fig.update_layout(
         map=dict(

@@ -5,11 +5,14 @@ class AdvStoreIds:
 
 class AdvControlIds:
     GLIDER_SELECT = "adv-glider-select"
-    RANGE_MODE = "adv-range-mode"
     SECTION_SELECT = "adv-section-select"
+    RANGE_TOGGLE = "adv-range-toggle"
     DIVE_INPUT = "adv-dive-input"
     DIVE_PREV = "adv-dive-prev"
     DIVE_NEXT = "adv-dive-next"
+    DIVE_INPUT2 = "adv-dive-input2"
+    DIVE_PREV2 = "adv-dive-prev2"
+    DIVE_NEXT2 = "adv-dive-next2"
     CAST_FILTER = "adv-cast-filter"
     INSTRUMENT_SELECT = "adv-instrument-select"
     X_AXIS_SELECT = "adv-x-axis-select"
@@ -21,6 +24,5 @@ class AdvGraphIds:
     MINI_MAP = "adv-mini-map"
 
 class AdvContainerIds:
-    SECTION_CONTAINER = "adv-section-container"
-    DIVE_CONTAINER = "adv-dive-container"
+    DIVE_INPUT2_CONTAINER = "adv-dive-input2-container"
     MINIMAP_CARD = "adv-minimap-card"

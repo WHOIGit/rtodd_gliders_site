@@ -4,6 +4,22 @@ import dash_bootstrap_components as dbc
 from .names import AdvStoreIds, AdvControlIds, AdvGraphIds, AdvContainerIds
 
 
+def _dive_input(id_, prev_id, next_id, placeholder="Dive #"):
+    return dbc.InputGroup([
+        dcc.Input(
+            id=id_,
+            type="number",
+            min=1,
+            placeholder=placeholder,
+            className="form-control text-center",
+            style={"textAlign": "center"},
+            debounce=True,
+        ),
+        dbc.Button("▲", id=next_id, color="secondary", outline=True, size="sm"),
+        dbc.Button("▼", id=prev_id, color="secondary", outline=True, size="sm"),
+    ], className="mb-1")
+
+
 def _controls_card():
     return dbc.Card(
         dbc.CardBody([
@@ -21,52 +37,51 @@ def _controls_card():
 
             html.Hr(className="my-3"),
 
-            # Data range mode
-            html.Label("Data Range", className="fw-semibold mb-1"),
-            dbc.RadioItems(
-                id=AdvControlIds.RANGE_MODE,
-                options=[
-                    {"label": "Section", "value": "section"},
-                    {"label": "Dive", "value": "dive"},
-                ],
-                value="section",
-                inline=True,
-                className="mb-2",
-            ),
-
-            # Section selector (visible by default)
-            html.Div(
-                [
-                    dcc.Dropdown(
-                        id=AdvControlIds.SECTION_SELECT,
-                        options=[],
-                        value=None,
-                        placeholder="Select section...",
-                        clearable=True,
+            # Dive select header row with Range toggle
+            dbc.Row([
+                dbc.Col(
+                    html.Label("Dive Select", className="fw-semibold mb-0"),
+                    width="auto",
+                ),
+                dbc.Col(
+                    dbc.Checklist(
+                        id=AdvControlIds.RANGE_TOGGLE,
+                        options=[{"label": "Range", "value": "range"}],
+                        value=[],
+                        switch=True,
+                        inline=True,
+                        className="mb-0",
                     ),
-                ],
-                id=AdvContainerIds.SECTION_CONTAINER,
+                    className="d-flex align-items-center justify-content-end",
+                ),
+            ], className="mb-1 align-items-center"),
+
+            # First dive input (always visible)
+            _dive_input(
+                AdvControlIds.DIVE_INPUT,
+                AdvControlIds.DIVE_PREV,
+                AdvControlIds.DIVE_NEXT,
             ),
 
-            # Dive number input (hidden by default)
-            html.Div(
-                [
-                    dbc.InputGroup([
-                        dcc.Input(
-                            id=AdvControlIds.DIVE_INPUT,
-                            type="number",
-                            min=1,
-                            placeholder="Dive #",
-                            className="form-control text-center",
-                            style={"textAlign": "center"},
-                            debounce=True,
-                        ),
-                        dbc.Button("▲", id=AdvControlIds.DIVE_NEXT, color="secondary", outline=True, size="sm"),
-                        dbc.Button("▼", id=AdvControlIds.DIVE_PREV, color="secondary", outline=True, size="sm"),
-                    ]),
-                ],
-                id=AdvContainerIds.DIVE_CONTAINER,
-                style={"display": "none"},
+            # Second dive input (shown when Range is toggled)
+            dbc.Collapse(
+                _dive_input(
+                    AdvControlIds.DIVE_INPUT2,
+                    AdvControlIds.DIVE_PREV2,
+                    AdvControlIds.DIVE_NEXT2,
+                ),
+                id=AdvContainerIds.DIVE_INPUT2_CONTAINER,
+                is_open=False,
+            ),
+
+            # Section quick-select
+            html.Label("Section", className="fw-semibold mt-2 mb-1"),
+            dcc.Dropdown(
+                id=AdvControlIds.SECTION_SELECT,
+                options=[],
+                value=None,
+                placeholder="Jump to section...",
+                clearable=True,
             ),
 
             html.Hr(className="my-3"),
