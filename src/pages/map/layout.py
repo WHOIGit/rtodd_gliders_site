@@ -19,7 +19,7 @@ def intro_div():
             "Global Ocean Observing System and in support of various oceanographic field campaigns"
         ),
         html.P('Our work is funded by:'),
-        html.Img(src=app.get_asset_url("sponsors.png"), style={"width": "350px"}),
+        html.Img(src=app.get_asset_url("sponsors.png"), style={"maxWidth": "350px", "width": "100%"}),
         ])
 
 def options_div():
@@ -124,7 +124,7 @@ def section_details_div():
                                 clearable=True,
                             ),
                         ],
-                        width=7,
+                        xs=12, sm=7,
                     ),
                     dbc.Col(
                         [
@@ -137,7 +137,7 @@ def section_details_div():
                                 clearable=True,
                             ),
                         ],
-                        width=5,
+                        xs=12, sm=5,
                     ),
                 ],
                 className="g-2",

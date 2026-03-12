@@ -14,15 +14,16 @@ def make_navbar() -> dbc.Navbar:
     """
     # TODO WHOI image
 
-    nav_items = [dbc.NavbarBrand("GliderApp", href="/")]
+    NAVBAR_TOGGLE_ID = "navbar-toggler"
+    NAVBAR_COLLAPSE_ID = "navbar-collapse"
+
+    nav_links = []
     for page in dash.page_registry.values():
-        # You can add conditions here to hide certain pages from the navbar
-        # e.g., if page.get("name") == "NotShown": continue
         href = page["path"]
         if os.environ.get('PROD', 'False').lower() in ("true", "1"):
             href = '/dashapp'+page["path"]
 
-        nav_items.append(
+        nav_links.append(
             dbc.NavItem(
                 dbc.NavLink(
                     page["name"],
@@ -35,19 +36,35 @@ def make_navbar() -> dbc.Navbar:
     navbar = dbc.Navbar(
         dbc.Container(
             [
-                # Left side: Brand
-                #pullout_btn,
-
-                # Right side: Links
-                dbc.Nav(
-                    nav_items,
-                    className="ms-auto",  # push nav items to the right
+                dbc.NavbarBrand("GliderApp", href="/"),
+                dbc.NavbarToggler(id=NAVBAR_TOGGLE_ID, n_clicks=0),
+                dbc.Collapse(
+                    dbc.Nav(
+                        nav_links,
+                        className="ms-auto",
+                        navbar=True,
+                    ),
+                    id=NAVBAR_COLLAPSE_ID,
+                    is_open=False,
                     navbar=True,
                 ),
             ],
             fluid=True,
         ),
         className="mb-0",
+    )
+
+    # Clientside callback to toggle the collapse on mobile
+    dash.clientside_callback(
+        """
+        function(n_clicks, is_open) {
+            if (n_clicks > 0) { return !is_open; }
+            return is_open;
+        }
+        """,
+        dash.Output(NAVBAR_COLLAPSE_ID, "is_open"),
+        dash.Input(NAVBAR_TOGGLE_ID, "n_clicks"),
+        dash.State(NAVBAR_COLLAPSE_ID, "is_open"),
     )
 
     return navbar
@@ -66,8 +83,7 @@ def create_layout():
             "left": "50%",
             "transform": "translateX(-50%)",
             "zIndex": 1050,
-            "minWidth": "350px",
-            "maxWidth": "80%",
+            "maxWidth": "90vw",
         },
     )
 
