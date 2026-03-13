@@ -121,26 +121,20 @@ def person_card(person: Dict[str, Any], card_bg: str, card_height: int = 170) ->
                             className="d-flex align-items-center justify-content-between mb-1",
                         ),
                         html.Div(role, className="mb-2", style={"color": "#6c757d"}) if role else None,
-                        html.P(desc, className="mb-0", style={"overflow": "hidden"}) if desc else None,
+                        html.P(desc, className="mb-0") if desc else None,
                     ],
                     xs=12,
                     sm=8,
                     md=9,
                     className="p-3",
-                    style={
-                        "height": f"{card_height}px",
-                        "overflow": "hidden",  # keeps all cards same height
-                    },
                 ),
             ],
             className="g-0",
-            style={"height": f"{card_height}px"},
         ),
         className="mb-3 shadow-sm",
         style={
             "borderRadius": "16px",
             "overflow": "hidden",
-            "height": f"{card_height + 16}px",  # small cushion for card chrome
             "backgroundColor": card_bg,
         },
     )
