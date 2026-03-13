@@ -54,6 +54,36 @@ def range_slider_marks(t_min, t_max, target_mark_count=10):
     return marks
 
 
+def load_map_region_config(config_path):
+    """
+    Load map region presets from a YAML file.
+
+    Returns:
+        default_region (str): key of the default selected region
+        region_options (list[dict]): RadioItems-compatible options (enabled only)
+        region_presets (dict): key -> {center, zoom} for non-auto regions
+    """
+    import yaml
+    with open(config_path) as f:
+        cfg = yaml.safe_load(f)
+
+    default_region = cfg.get("default", "auto")
+    region_options = []
+    region_presets = {}
+
+    for key, val in cfg.get("regions", {}).items():
+        if not val.get("enabled", True):
+            continue
+        region_options.append({"label": val["label"], "value": key})
+        if key != "auto":
+            region_presets[key] = {
+                "center": {"lat": val["center"]["lat"], "lon": val["center"]["lon"]},
+                "zoom": val["zoom"],
+            }
+
+    return default_region, region_options, region_presets
+
+
 def latlon_offset(lat, lon, v_dy, u_dx, scale=1):
     """
     Calculate new latitude and longitude given offsets in meters.

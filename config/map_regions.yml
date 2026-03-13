@@ -1,0 +1,23 @@
+default: auto   # value pre-selected in the UI
+
+regions:
+  auto:
+    label: "Auto"
+    enabled: true
+
+  gulfstream:
+    label: "Gulf Stream"
+    enabled: true
+    center:
+      lat: 35.0
+      lon: -65.0
+    zoom: 4.2
+
+  global:
+    label: "Global"
+    enabled: true
+    center:
+      lat: 0
+      lon: 0
+    zoom: 1.2
+

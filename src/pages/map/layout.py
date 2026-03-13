@@ -1,10 +1,16 @@
 import time
+from pathlib import Path
 
 import dash
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 
 from .names import *
+from utils import load_map_region_config
+
+_default_region, _region_options, _ = load_map_region_config(
+    Path("config/map_regions.yml").resolve()
+)
 
 app = dash.get_app()
 
@@ -79,12 +85,8 @@ def options_div():
 
     region_select = dbc.RadioItems(
         id=ControlIds.REGION_SELECT,
-        options=[
-            {"label": "Auto", "value": "auto"},
-            {"label": "Gulf Stream", "value": "gulfstream"},
-            {"label": "Global", "value": "global"},
-        ],
-        value="auto",
+        options=_region_options,
+        value=_default_region,
         inline=False,
         className="btn-group-vertical w-100",
         inputClassName="btn-check",

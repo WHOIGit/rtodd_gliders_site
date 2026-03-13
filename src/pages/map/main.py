@@ -17,7 +17,7 @@ import pandas as pd
 from dash.exceptions import PreventUpdate
 
 from data_loader import GliderDataLoader
-from utils import latlon_offset
+from utils import latlon_offset, load_map_region_config
 from .layout import layout
 from names import *
 from .names import *
@@ -145,11 +145,7 @@ def blank_map():
     fig.update_layout(map=map_fig_common_layout_kwargs, **map_margins)
     return fig
 
-# TODO config file
-REGION_PRESETS = {
-    "global":      {"center": {"lat": 0, "lon": 0}, "zoom": 1.2},
-    "gulfstream": {"center": {"lat": 35.0, "lon": -65.0}, "zoom": 4.2},
-}
+_, _, REGION_PRESETS = load_map_region_config(Path("config/map_regions.yml").resolve())
 
 def _build_map_fig(latlon_records, uv_records, time_range, uv_scale, region_key):
     COLOR_CYCLE = cycle([
