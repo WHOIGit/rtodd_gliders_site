@@ -2,6 +2,7 @@ class AdvStoreIds:
     GLIDER_DATA_STORE = "adv-glider-data-store"
     INSTRUMENT_DF_STORE = "adv-instrument-df-store"
     SELECTION_STORE = "adv-selection-store"
+    MINIMAP_CLICK_STORE = "adv-minimap-click-store"
 
 class AdvControlIds:
     GLIDER_SELECT = "adv-glider-select"

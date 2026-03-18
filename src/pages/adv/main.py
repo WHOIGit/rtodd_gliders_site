@@ -338,10 +338,11 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
     Input(AdvControlIds.X_AXIS_SELECT, "value"),
     Input(AdvControlIds.Y_AXIS_SELECT, "value"),
     Input(AdvControlIds.COLOR_SELECT, "value"),
+    Input(AdvStoreIds.MINIMAP_CLICK_STORE, "data"),
     State(AdvStoreIds.SELECTION_STORE, "data"),
     prevent_initial_call=True,
 )
-def update_data_plot(inst_store, x_col, y_col, color_col, selection):
+def update_data_plot(inst_store, x_col, y_col, color_col, click_store, selection):
     if not inst_store or not x_col or not y_col:
         raise PreventUpdate
 
@@ -380,6 +381,20 @@ def update_data_plot(inst_store, x_col, y_col, color_col, selection):
     else:
         symbols = "circle"
 
+    # Build customdata with ndive + color value per point
+    cdata = np.column_stack([df["ndive"].values, color_data.values])
+
+    # Compute selectedpoints if a dive was clicked on the minimap
+    sel_points = None
+    print(f"[DEBUG] triggered_id={dash.ctx.triggered_id!r}, expected={AdvStoreIds.MINIMAP_CLICK_STORE!r}, click_store={click_store}")
+    if click_store and dash.ctx.triggered_id == AdvStoreIds.MINIMAP_CLICK_STORE:
+        clicked_ndive = click_store.get("ndive")
+        if clicked_ndive is not None:
+            matches = df.index[df["ndive"] == clicked_ndive].tolist()
+            print(f"[DEBUG] clicked_ndive={clicked_ndive!r}, type={type(clicked_ndive)}, ndive_dtype={df['ndive'].dtype}, matches={len(matches)}")
+            if matches:
+                sel_points = matches
+
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=x_data,
@@ -394,11 +409,15 @@ def update_data_plot(inst_store, x_col, y_col, color_col, selection):
             colorbar=dict(title=color_label, thickness=14),
             showscale=True,
         ),
-        customdata=color_data.values,
+        selected=dict(marker=dict(opacity=1)),
+        unselected=dict(marker=dict(opacity=0.15, size=3)),
+        selectedpoints=sel_points,
+        customdata=cdata,
         hovertemplate=(
             f"<b>{x_col}</b>: %{{x}}<br>"
             f"<b>{y_col}</b>: %{{y}}<br>"
-            f"<b>{color_label}</b>: %{{customdata}}<br>"
+            f"<b>ndive</b>: %{{customdata[0]}}<br>"
+            f"<b>{color_label}</b>: %{{customdata[1]}}<br>"
             "<extra></extra>"
         ),
     ))
@@ -459,14 +478,28 @@ def update_minimap(glider_store, selection):
         start, end = selection["dive_range"]
         highlight = track[track["ndive"].between(start, end)]
         if not highlight.empty:
+            # Line trace for the highlighted track
             fig.add_trace(go.Scattermap(
                 lat=highlight["lat"],
                 lon=highlight["lon"],
-                mode="lines+markers",
+                mode="lines",
                 line=dict(width=3, color="royalblue"),
-                marker=dict(size=4, color="royalblue"),
                 showlegend=False,
+                hoverinfo="skip",
+            ))
+            # Markers-only trace: one point per dive (mean of start/end)
+            per_dive = highlight.groupby("ndive", sort=False).agg(
+                lat=("lat", "mean"), lon=("lon", "mean"),
+            ).reset_index()
+            fig.add_trace(go.Scattermap(
+                lat=per_dive["lat"],
+                lon=per_dive["lon"],
+                mode="markers",
+                marker=dict(size=8, color="royalblue"),
+                showlegend=False,
+                customdata=per_dive["ndive"].values,
                 hovertemplate=(
+                    "Dive: %{customdata}<br>"
                     "Lat: %{lat:.4f}<br>"
                     "Lon: %{lon:.4f}<br>"
                     "<extra></extra>"
@@ -491,6 +524,44 @@ def update_minimap(glider_store, selection):
     )
 
     return fig
+
+
+# ---------------------------------------------------------------------------
+# Callback 6a: Mini-map click → store clicked ndive
+# ---------------------------------------------------------------------------
+@app.callback(
+    Output(AdvStoreIds.MINIMAP_CLICK_STORE, "data"),
+    Input(AdvGraphIds.MINI_MAP, "clickData"),
+    State(AdvStoreIds.GLIDER_DATA_STORE, "data"),
+    State(AdvStoreIds.SELECTION_STORE, "data"),
+    prevent_initial_call=True,
+)
+def minimap_click(click_data, glider_store, selection):
+    if not click_data or not glider_store or not selection:
+        raise PreventUpdate
+
+    point = click_data["points"][0]
+    # Only handle clicks on the per-dive markers trace (curveNumber 2)
+    if point.get("curveNumber") != 2:
+        raise PreventUpdate
+
+    point_index = point.get("pointIndex")
+    if point_index is None:
+        raise PreventUpdate
+
+    # Reconstruct per-dive ndive list (same groupby as callback 6)
+    track = pd.DataFrame(glider_store["track_records"])
+    start, end = selection["dive_range"]
+    highlight = track[track["ndive"].between(start, end)]
+    per_dive_ndives = highlight.groupby("ndive", sort=False).first().reset_index()["ndive"]
+
+    if point_index >= len(per_dive_ndives):
+        raise PreventUpdate
+
+    clicked_ndive = int(per_dive_ndives.iloc[point_index])
+    #print(f"[DEBUG 6a] clicked ndive={clicked_ndive}")
+    return {"ndive": clicked_ndive}
+
 
 
 # ---------------------------------------------------------------------------
