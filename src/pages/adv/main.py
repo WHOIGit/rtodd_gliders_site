@@ -394,9 +394,11 @@ def update_data_plot(inst_store, x_col, y_col, color_col, selection):
             colorbar=dict(title=color_label, thickness=14),
             showscale=True,
         ),
+        customdata=color_data.values,
         hovertemplate=(
             f"<b>{x_col}</b>: %{{x}}<br>"
             f"<b>{y_col}</b>: %{{y}}<br>"
+            f"<b>{color_label}</b>: %{{customdata}}<br>"
             "<extra></extra>"
         ),
     ))
