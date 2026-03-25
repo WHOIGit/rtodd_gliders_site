@@ -36,7 +36,7 @@ def make_navbar() -> dbc.Navbar:
     navbar = dbc.Navbar(
         dbc.Container(
             [
-                dbc.NavbarBrand("GliderApp", href="/"),
+                dbc.NavbarBrand("WHOI Spray Glider Operations", href="/"),
                 dbc.NavbarToggler(id=NAVBAR_TOGGLE_ID, n_clicks=0),
                 dbc.Collapse(
                     dbc.Nav(

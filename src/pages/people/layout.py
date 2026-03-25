@@ -53,9 +53,10 @@ def _pick_image(image_field: Optional[str]) -> str:
     return _asset_url(DEFAULT_IMAGE)
 
 
-def person_card(person: Dict[str, Any], card_bg: str, card_height: int = 170) -> dbc.Card:
+def person_card(person: Dict[str, Any], card_bg: str, card_height: int = 170, show_image: bool = True) -> dbc.Card:
     name = (person.get("name") or "").strip()
     role = (person.get("role") or "").strip()
+    now = (person.get("now") or "").strip()
     email = (person.get("email") or "").strip()
     website = (person.get("website") or "").strip()
     desc = (person.get("description") or "").strip()
@@ -88,47 +89,57 @@ def person_card(person: Dict[str, Any], card_bg: str, card_height: int = 170) ->
     # very light grey background for previous members
     card_bg = card_bg or "white"  # bootstrap-ish "gray-100"
 
+    content_col = dbc.Col(
+        [
+            html.Div(
+                [
+                    html.H3(
+                        name or "—",
+                        className="mb-0",
+                        style={"fontWeight": 700},
+                    ),
+                    html.Div(icon_links, className="d-flex align-items-center"),
+                ],
+                className="d-flex align-items-center justify-content-between mb-1",
+            ),
+            html.Div(role, className="mb-2", style={"color": "#6c757d"}) if role else None,
+            html.Div([
+                "Now: ",
+                html.Span(now, style={"fontStyle": "italic"})
+            ], className="mb-2", style={"color": "#6c757d", "fontSize": "0.9rem"}) if now else None,
+            html.P(desc, className="mb-0") if desc else None,
+        ],
+        xs=12,
+        sm=8 if show_image else 12,
+        md=9 if show_image else 12,
+        className="p-3",
+    )
+
+    row_children = []
+    if show_image:
+        row_children.append(
+            dbc.Col(
+                html.Img(
+                    src=image,
+                    alt=name or "Person photo",
+                    style={
+                        "width": "140px",
+                        "height": f"{card_height}px",
+                        "borderRadius": "12px",
+                        "objectFit": "cover",
+                    },
+                ),
+                xs=12,
+                sm=4,
+                md=3,
+                className="d-flex align-items-center justify-content-center p-3",
+            )
+        )
+    row_children.append(content_col)
+
     return dbc.Card(
         dbc.Row(
-            [
-                dbc.Col(
-                    html.Img(
-                        src=image,
-                        alt=name or "Person photo",
-                        style={
-                            "width": "140px",
-                            "height": f"{card_height}px",
-                            "borderRadius": "12px",
-                            "objectFit": "cover",
-                        },
-                    ),
-                    xs=12,
-                    sm=4,
-                    md=3,
-                    className="d-flex align-items-center justify-content-center p-3",
-                ),
-                dbc.Col(
-                    [
-                        html.Div(
-                            [
-                                html.H3(
-                                    name or "—",
-                                    className="mb-0",
-                                    style={"fontWeight": 700},
-                                ),
-                                html.Div(icon_links, className="d-flex align-items-center"),
-                            ],
-                            className="d-flex align-items-center justify-content-between mb-1",
-                        ),
-                        html.Div(role, className="mb-2", style={"color": "#6c757d"}) if role else None,
-                        html.P(desc, className="mb-0") if desc else None,
-                    ],
-                    xs=12,
-                    sm=8,
-                    md=9,
-                    className="p-3",
-                ),
-            ],
+            row_children,
             className="g-0",
         ),
         className="mb-3 shadow-sm",
@@ -140,8 +151,8 @@ def person_card(person: Dict[str, Any], card_bg: str, card_height: int = 170) ->
     )
 
 
-def people_section(title: str, people: List[Dict[str, Any]], bg: str = None, card_heights: int = 170) -> html.Div:
-    cards = [person_card(p, card_bg=bg, card_height=card_heights) for p in (people or [])]
+def people_section(title: str, people: List[Dict[str, Any]], bg: str = None, card_heights: int = 170, show_image: bool = True) -> html.Div:
+    cards = [person_card(p, card_bg=bg, card_height=card_heights, show_image=show_image) for p in (people or [])]
     return html.Div(
         [
             html.H2(title, className="mt-4 mb-3"),
@@ -156,14 +167,11 @@ def make_people_layout(yaml_path: str | Path) -> dbc.Container:
     current_members = data.get("current_members", []) or []
     previous_members = data.get("previous_members", []) or []
 
-    # If you want previous members to be simpler (e.g., no images), you can
-    # keep using the same card renderer; it will just omit missing fields.
-
     return dbc.Container(
         [
             html.H1("People", className="mt-4"),
             people_section("Team", current_members),
-            people_section("Previous Members", previous_members, bg="#f8f9fa", card_heights=100),
+            people_section("Previous Members", previous_members, bg="#f8f9fa", card_heights=100, show_image=False),
             html.Div(className="mb-5"),
         ],
         fluid=False,
