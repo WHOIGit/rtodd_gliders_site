@@ -54,6 +54,7 @@ Set in `compose.yml` for production; override in `.env` for local development.
 | `PORTRAITS_DEFAULT` | `default.jpg` | Fallback portrait image |
 | `PUBLICATIONS_HTML_PATH` | `config/publications.html` | Path to publications HTML |
 | `HOME_HTML_PATH` | `config/homepage.html` | Path to home page HTML |
+| `DATAPAGE_HTML_PATH` | `config/datapage.html` | Path to data page HTML |
 
 ## Local Development
 

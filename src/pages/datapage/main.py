@@ -2,7 +2,7 @@ import os
 import dash
 from utils import static_layout
 
-HTML_PATH = os.environ.get("PUBLICATIONS_HTML_PATH", "config/datapage.html")
+HTML_PATH = os.environ.get("DATAPAGE_HTML_PATH", "config/datapage.html")
 try:
     layout = static_layout(HTML_PATH)
 
