@@ -8,5 +8,5 @@ dash.register_page(
     __name__,
     path="/people",             # URL path
     name="People",              # Text shown in navbar (via page["name"])
-    title="GliderApp - People", # <title> of the browser tab
+    title="Gliders - People", # <title> of the browser tab
 )

@@ -1,6 +1,8 @@
 import datetime as dt
 import pandas as pd
 import numpy as np
+from pathlib import Path
+from dash import html, dcc
 
 
 def range_slider_marks(t_min, t_max, target_mark_count=10):
@@ -116,3 +118,30 @@ def latlon_offset(lat, lon, v_dy, u_dx, scale=1):
     return new_lat, new_lon
 
 
+def static_layout(html_file: str, title: str = None) -> html.Div:
+    """
+    Generic static HTML layout with optional title.
+
+    Parameters:
+    -----------
+    html_file : str
+        Path to HTML file (relative to current working directory).
+    title : str, optional
+        Optional title to display above the HTML content.
+
+    Returns:
+    --------
+    html.Div
+        A Dash Div containing the title (if provided) and HTML content.
+    """
+    html_text = (Path.cwd() / html_file).read_text(encoding="utf-8")
+    children = []
+    if title:
+        children.append(html.H1(title, style={"textAlign": "center", "marginBottom": "40px"}))
+    children.append(
+        html.Div(
+            dcc.Markdown(html_text, dangerously_allow_html=True),
+            style={"maxWidth": "800px", "margin": "0 auto"},
+        )
+    )
+    return html.Div(children, style={"padding": "40px 20px"})

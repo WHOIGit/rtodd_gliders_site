@@ -25,9 +25,6 @@ def make_navbar() -> dbc.Navbar:
         dbc.NavItem(
             dbc.NavLink("Home", href=href("/"), active="exact")
         ),
-        dbc.NavItem(
-            dbc.NavLink("About", href=href("/about"), active="exact")
-        ),
         dbc.DropdownMenu([
             dbc.DropdownMenuItem("Real-time", href=href("/plotting/realtime")),
             dbc.DropdownMenuItem("Archived", href=href("/plotting/archived")),
@@ -35,7 +32,7 @@ def make_navbar() -> dbc.Navbar:
             dbc.DropdownMenuItem("Engineering", href=href("/plotting/engineering")),
         ], label="Plotting", nav=True, in_navbar=True),
         dbc.NavItem(
-            dbc.NavLink("Data", href=href("/data"), active="exact")
+            dbc.NavLink("Data", href=href("/datapage"), active="exact")
         ),
         dbc.NavItem(
             dbc.NavLink("People", href=href("/people"), active="exact")

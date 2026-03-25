@@ -27,7 +27,7 @@ dash.register_page(
     __name__,
     path="/plotting/realtime",          # URL path
     name="Real-time",          # Text shown in navbar (via page["name"])
-    title="GliderApp - Real-time", # <title> of the browser tab
+    title="Gliders - Real-time", # <title> of the browser tab
 )
 
 app = dash.get_app()

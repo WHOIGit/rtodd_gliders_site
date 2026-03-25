@@ -15,7 +15,7 @@ dash.register_page(
     __name__,
     path="/plotting/profiles",
     name="Profiles",
-    title="GliderApp - Profiles",
+    title="Gliders - Profiles",
 )
 
 app = dash.get_app()
