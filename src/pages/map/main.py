@@ -26,8 +26,8 @@ from .names import *
 dash.register_page(
     __name__,
     path="/plotting/realtime",          # URL path
-    name="Real-time",          # Text shown in navbar (via page["name"])
-    title="Gliders - Real-time", # <title> of the browser tab
+    name="Realtime Map",          # Text shown in navbar (via page["name"])
+    title="Gliders - Realtime Map", # <title> of the browser tab
 )
 
 app = dash.get_app()

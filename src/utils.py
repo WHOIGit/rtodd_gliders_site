@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from dash import html, dcc
+from dash_extensions import Purify
 
 
 def range_slider_marks(t_min, t_max, target_mark_count=10):
@@ -137,10 +138,10 @@ def static_layout(html_file: str, title: str = None) -> html.Div:
     html_text = (Path.cwd() / html_file).read_text(encoding="utf-8")
     children = []
     if title:
-        children.append(html.H1(title, style={"textAlign": "center", "marginBottom": "40px"}))
+        children.append(html.H1(title))
     children.append(
         html.Div(
-            dcc.Markdown(html_text, dangerously_allow_html=True),
+            Purify(html_text),
             style={"maxWidth": "800px", "margin": "0 auto"},
         )
     )
