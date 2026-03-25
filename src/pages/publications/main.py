@@ -1,12 +1,20 @@
 import os
+from pathlib import Path
+
 import dash
+from dash import html, dcc
+
 from utils import static_layout
 
 PUBLICATIONS_HTML_PATH = os.environ.get("PUBLICATIONS_HTML_PATH", "config/publications.html")
-layout = static_layout(
-    PUBLICATIONS_HTML_PATH,
-    title="Publications Related to WHOI Spray Glider Operations",
-)
+
+html_text = (Path.cwd() / PUBLICATIONS_HTML_PATH).read_text(encoding="utf-8")
+layout = html.Div([
+            html.H1('WHOI Spray Glider Operations Publications',
+                    style={"textAlign": "center", "marginBottom": "40px"}),
+            dcc.Markdown(html_text, dangerously_allow_html=True)],
+            style={"maxWidth": "800px", "margin": "0 auto"},
+        )
 
 # Register this file as a Dash "page"
 dash.register_page(
