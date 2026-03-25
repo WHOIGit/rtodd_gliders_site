@@ -13,9 +13,9 @@ from .names import AdvStoreIds, AdvControlIds, AdvGraphIds, AdvContainerIds
 
 dash.register_page(
     __name__,
-    path="/advanced",
-    name="Advanced",
-    title="GliderApp - Advanced",
+    path="/plotting/profiles",
+    name="Profiles",
+    title="GliderApp - Profiles",
 )
 
 app = dash.get_app()

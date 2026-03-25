@@ -9,34 +9,46 @@ from names import *
 
 def make_navbar() -> dbc.Navbar:
     """
-    Top navigation bar. It iterates over Dash's page registry
-    and builds links for each registered page.
+    Top navigation bar with manual structure including Plotting dropdown.
     """
     # TODO WHOI image
 
     NAVBAR_TOGGLE_ID = "navbar-toggler"
     NAVBAR_COLLAPSE_ID = "navbar-collapse"
 
-    nav_links = []
-    for page in dash.page_registry.values():
-        href = page["path"]
+    def href(path):
         if os.environ.get('PROD', 'False').lower() in ("true", "1"):
-            href = '/dashapp'+page["path"]
+            return '/dashapp' + path
+        return path
 
-        nav_links.append(
-            dbc.NavItem(
-                dbc.NavLink(
-                    page["name"],
-                    href=href,
-                    active="exact",
-                )
-            )
-        )
+    nav_links = [
+        dbc.NavItem(
+            dbc.NavLink("Home", href=href("/"), active="exact")
+        ),
+        dbc.NavItem(
+            dbc.NavLink("About", href=href("/about"), active="exact")
+        ),
+        dbc.DropdownMenu([
+            dbc.DropdownMenuItem("Real-time", href=href("/plotting/realtime")),
+            dbc.DropdownMenuItem("Archived", href=href("/plotting/archived")),
+            dbc.DropdownMenuItem("Profiles", href=href("/plotting/profiles")),
+            dbc.DropdownMenuItem("Engineering", href=href("/plotting/engineering")),
+        ], label="Plotting", nav=True, in_navbar=True),
+        dbc.NavItem(
+            dbc.NavLink("Data", href=href("/data"), active="exact")
+        ),
+        dbc.NavItem(
+            dbc.NavLink("People", href=href("/people"), active="exact")
+        ),
+        dbc.NavItem(
+            dbc.NavLink("Publications", href=href("/publications"), active="exact")
+        ),
+    ]
 
     navbar = dbc.Navbar(
         dbc.Container(
             [
-                dbc.NavbarBrand("WHOI Spray Glider Operations", href="/"),
+                dbc.NavbarBrand("WHOI Spray Glider Operations", href=href("/")),
                 dbc.NavbarToggler(id=NAVBAR_TOGGLE_ID, n_clicks=0),
                 dbc.Collapse(
                     dbc.Nav(

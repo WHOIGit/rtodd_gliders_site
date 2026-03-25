@@ -151,6 +151,35 @@ def person_card(person: Dict[str, Any], card_bg: str, card_height: int = 170, sh
     )
 
 
+def previous_members_grid(title: str, people: List[Dict[str, Any]], bg: str = None) -> html.Div:
+    """Display previous members in a responsive grid layout (2-4 columns)."""
+    if not people:
+        return html.Div([
+            html.H2(title, className="mt-4 mb-3"),
+            html.Div("None listed.", className="text-muted"),
+        ])
+
+    # Create grid with responsive columns: 1 col on mobile, 2 on tablet, 3+ on desktop
+    cols = []
+    for person in people:
+        cols.append(
+            dbc.Col(
+                person_card(person, card_bg=bg, card_height=80, show_image=False),
+                xs=12,
+                sm=6,
+                md=4,
+                className="mb-3",
+            )
+        )
+
+    return html.Div(
+        [
+            html.H2(title, className="mt-4 mb-3"),
+            dbc.Row(cols, className="g-2"),
+        ]
+    )
+
+
 def people_section(title: str, people: List[Dict[str, Any]], bg: str = None, card_heights: int = 170, show_image: bool = True) -> html.Div:
     cards = [person_card(p, card_bg=bg, card_height=card_heights, show_image=show_image) for p in (people or [])]
     return html.Div(
@@ -171,7 +200,7 @@ def make_people_layout(yaml_path: str | Path) -> dbc.Container:
         [
             html.H1("People", className="mt-4"),
             people_section("Team", current_members),
-            people_section("Previous Members", previous_members, bg="#f8f9fa", card_heights=100, show_image=False),
+            previous_members_grid("Previous Members", previous_members, bg="#f8f9fa"),
             html.Div(className="mb-5"),
         ],
         fluid=False,

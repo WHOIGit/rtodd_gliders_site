@@ -25,9 +25,9 @@ from .names import *
 # Register this file as a Dash "page"
 dash.register_page(
     __name__,
-    path="/",          # URL path
-    name="Map",          # Text shown in navbar (via page["name"])
-    title="GliderApp - Map", # <title> of the browser tab
+    path="/plotting/realtime",          # URL path
+    name="Real-time",          # Text shown in navbar (via page["name"])
+    title="GliderApp - Real-time", # <title> of the browser tab
 )
 
 app = dash.get_app()
