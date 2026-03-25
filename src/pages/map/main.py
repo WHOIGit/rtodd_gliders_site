@@ -458,8 +458,8 @@ def set_glider_options(store_data):
     State(StoreIds.MAPDATA_STORE, "data"),
 )
 def populate_section_details(glider_sn, section_num, store_data):
-    if not glider_sn or section_num is None:
-        return "Select a glider and section to see details."
+    if not glider_sn:
+        return "Select a glider to see details."
     store_data = store_data or {}
     # dict_keys(['latlon_records', 'uv_records'])
 
@@ -477,25 +477,33 @@ def populate_section_details(glider_sn, section_num, store_data):
         c="Sound Speed",
     )
 
+    # Mission link - always shown when glider is selected
+    mission_link = html.Div([
+        html.A("All plots for this mission", href=url_realtime_pattern.format(int(glider_sn)), target="_blank"),
+    ], style={"margin-bottom": "30px"})
+
+    # Section plot images - only shown when section is selected
+    if section_num is None:
+        details = html.Div([mission_link, "Select a section to see plots."])
+        return details
+
     def img_block(series):
         url = url_pattern.format(SN=int(glider_sn), KEY=series, SECTION=section_num)
         block = html.Div([
             html.H4(static_charts[series]),
-            html.Img(src=url, style={"width": "100%", "max-width": "300px", "margin-top": "10px"})
+            html.A(
+                html.Img(src=url, style={"width": "100%", "max-width": "300px", "margin-top": "10px"}),
+                href=url,
+                target="_blank",
+            )
         ], style={"margin-bottom": "20px"})
         return block
 
     images = [img_block(key) for key in static_charts.keys()]
 
-    # TEMPLATE: replace with real lookup
-    # Example text:
     details = html.Div([
-        html.A(url_realtime_pattern.format(int(glider_sn)).replace('https://',''), href=url_realtime_pattern.format(int(glider_sn))),
-        html.Br(),
-        # html.P(['Glider: ',
-        #         html.A(f"SN {glider_sn}", href=f"https://gliders.whoi.edu/data/realtime/{int(glider_sn):04d}.html"),
-        #         '  Section: ',
-        #         html.Strong(section_num)]),
+        mission_link,
+        html.H3(f"Section {section_num} Plots"),
         *images
     ])
     return details
