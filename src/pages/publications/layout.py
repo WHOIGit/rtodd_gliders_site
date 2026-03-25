@@ -9,7 +9,7 @@ def make_layout(html_file: str) -> html.Div:
     html_text = (Path.cwd() / html_file).read_text(encoding="utf-8")
     return html.Div(
         [
-            html.H1("Publications", style={"textAlign": "center", "marginBottom": "40px"}),
+            html.H1("Publications Related to WHOI Spray Glider Operations", style={"textAlign": "center", "marginBottom": "40px"}),
 
             # Centered container, max width 800, responsive
             html.Div(

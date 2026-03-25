@@ -63,7 +63,7 @@ def options_div():
 
     uv_scale = html.Div(
         [
-            html.Div("UV Drift Scale", className="fw-semibold mb-1"),
+            html.Div("Depth-Average Current Scale", className="fw-semibold mb-1"),
             dcc.Slider(
                 id=ControlIds.UV_SCALE,
                 min=0,

@@ -162,7 +162,7 @@ def _build_map_fig(latlon_records, uv_records, time_range, uv_scale, region_key)
     for glider_sn, records in latlon_records.items():
         color_rgb = next(COLOR_CYCLE)
         color_hex = rgb_to_hex(*color_rgb)
-        legendgroup = f"SN {glider_sn}"
+        legendgroup = f"Spray {glider_sn}"
 
         df = pd.DataFrame(records)
         df['dt'] = df.time.apply(lambda x: pd.NaT if np.isnan(x) else dt.datetime.utcfromtimestamp(x/1))
@@ -203,7 +203,7 @@ def _build_map_fig(latlon_records, uv_records, time_range, uv_scale, region_key)
                     lat=df_sec["lat"],
                     lon=df_sec["lon"],
                     mode="lines", # markers+lines
-                    name=f"SN {glider_sn}",
+                    name=f"Spray {glider_sn}",
                     legendgroup=legendgroup,  # or f"{glider_sn}"
                     marker=dict(size=6, color=color),
                     line=dict(width=3, color=color),
@@ -246,7 +246,7 @@ def _build_map_fig(latlon_records, uv_records, time_range, uv_scale, region_key)
                 fig.add_trace(go.Scattermap(
                     lat=vlats,
                     lon=ulons,
-                    name=f"SN {glider_sn} UV",
+                    name=f"Spray {glider_sn} UV",
                     legendgroup=legendgroup,
                     showlegend=False,
                     hoverinfo="skip",
@@ -259,7 +259,7 @@ def _build_map_fig(latlon_records, uv_records, time_range, uv_scale, region_key)
         fig.add_trace(go.Scattermap(
             lat=[end["lat"]],
             lon=[end["lon"]],
-            name=f"SN {glider_sn} Endpoint",
+            name=f"Spray {glider_sn} Endpoint",
             mode="markers",
             marker=dict(
                 size=30,
@@ -448,7 +448,7 @@ def set_glider_options(store_data):
     store_data = store_data or {}
     latlon_records = store_data.get("latlon_records", {})
     sns = sorted(latlon_records.keys())
-    return [{"label": f"SN {sn}", "value": str(sn)} for sn in sns]
+    return [{"label": f"Spray {sn}", "value": str(sn)} for sn in sns]
 
 
 @app.callback(
@@ -467,14 +467,14 @@ def populate_section_details(glider_sn, section_num, store_data):
     url_pattern = 'https://gliders.whoi.edu/data/figs/realtime/{SN:04d}/{KEY}_{SECTION}.png'
 
     static_charts = dict(
-        map="Section Map",
-        TS="T-S",
-        theta="Theta",
+        map="Track and Depth-Average Currents",
+        TS="Potential Temperature - Salinity",
+        theta="Potential Temperature",
         s="Salinity",
-        fl="Fluorescence",
-        oxumolkg="Oxygen (umol/kg)",
+        fl="Chlorophyll",
+        oxumolkg="Dissolved Oxygen",
         ph="pH",
-        c="Conductivity",
+        c="Sound Speed",
     )
 
     def img_block(series):

@@ -386,12 +386,12 @@ def update_data_plot(inst_store, x_col, y_col, color_col, click_store, selection
 
     # Compute selectedpoints if a dive was clicked on the minimap
     sel_points = None
-    print(f"[DEBUG] triggered_id={dash.ctx.triggered_id!r}, expected={AdvStoreIds.MINIMAP_CLICK_STORE!r}, click_store={click_store}")
+    #print(f"[DEBUG] triggered_id={dash.ctx.triggered_id!r}, expected={AdvStoreIds.MINIMAP_CLICK_STORE!r}, click_store={click_store}")
     if click_store and dash.ctx.triggered_id == AdvStoreIds.MINIMAP_CLICK_STORE:
         clicked_ndive = click_store.get("ndive")
         if clicked_ndive is not None:
             matches = df.index[df["ndive"] == clicked_ndive].tolist()
-            print(f"[DEBUG] clicked_ndive={clicked_ndive!r}, type={type(clicked_ndive)}, ndive_dtype={df['ndive'].dtype}, matches={len(matches)}")
+            #print(f"[DEBUG] clicked_ndive={clicked_ndive!r}, type={type(clicked_ndive)}, ndive_dtype={df['ndive'].dtype}, matches={len(matches)}")
             if matches:
                 sel_points = matches
 
@@ -585,7 +585,7 @@ def toggle_minimap(value):
 )
 def populate_glider_options(_):
     sns = sorted(gdl.glider_sns())
-    opts = [{"label": f"Spray2 {sn:03d}", "value": sn} for sn in sns]
+    opts = [{"label": f"Spray {sn:03d}", "value": sn} for sn in sns]
     mtimes = gdl.sn_mtimes()
     most_recent = max(mtimes, key=mtimes.get) if mtimes else (sns[0] if sns else None)
     return opts, most_recent
