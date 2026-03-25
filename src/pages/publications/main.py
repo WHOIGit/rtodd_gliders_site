@@ -13,7 +13,7 @@ layout = html.Div([
             html.H1('WHOI Spray Glider Operations Publications',
                     style={"textAlign": "center", "marginBottom": "40px"}),
             dcc.Markdown(html_text, dangerously_allow_html=True)],
-            style={"maxWidth": "800px", "margin": "0 auto"},
+            style={"maxWidth": "840px", "margin": "0 auto", "padding": "40px 20px"},
         )
 
 # Register this file as a Dash "page"
