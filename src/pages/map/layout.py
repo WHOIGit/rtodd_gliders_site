@@ -25,7 +25,7 @@ def intro_div():
             "Global Ocean Observing System and in support of various oceanographic field campaigns"
         ),
         html.P('Our work is funded by:'),
-        html.Img(src=app.get_asset_url("sponsors.png"), style={"maxWidth": "350px", "width": "100%"}),
+        html.Img(src=app.get_asset_url("sponsors_800.png"), style={"maxWidth": "350px", "width": "100%"}),
         ])
 
 def options_div():
