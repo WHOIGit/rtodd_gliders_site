@@ -195,7 +195,21 @@ def main_layout():
     daysago = 30
     start = now - daysago * 24 * 60 * 60
 
-    map_div = dcc.Loading(
+    loading_overlay = html.Div(
+        [
+            html.Div(
+                [
+                    html.Div(className="map-loading-overlay__spinner"),
+                    "Loading map…",
+                ],
+                className="map-loading-overlay__label",
+            )
+        ],
+        id=ContainerIds.MAP_LOADING_OVERLAY,
+        className="map-loading-overlay",
+    )
+
+    map_loading = dcc.Loading(
         id="map-loading",
         type="circle",
         children=dcc.Graph(
@@ -205,6 +219,12 @@ def main_layout():
         ),
         parent_className="flex-grow-1 d-flex flex-column",
         parent_style={"minHeight": 0},
+    )
+
+    map_div = html.Div(
+        [map_loading, loading_overlay],
+        className="flex-grow-1 d-flex flex-column",
+        style={"position": "relative", "minHeight": 0},
     )
 
     return html.Div(

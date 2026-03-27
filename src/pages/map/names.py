@@ -26,6 +26,7 @@ class ContainerIds:
     MAP_ACCORDION = "map-accordion"
     HIDDEN_CUSTOMTIME_CONTAINER = "time-custom-container"
     SECTION_DETAILS = "accordion-section-details"
+    MAP_LOADING_OVERLAY = "map-loading-overlay"
 
 class TextIds:
     SECTION_DETAILS_TEXT = "section-details-text"

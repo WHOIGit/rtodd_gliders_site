@@ -43,6 +43,26 @@ map_fig_common_layout_kwargs = dict(
         ])],
 )
 
+clientside_callback(
+    """
+    function(figure, currentClass) {
+        if (currentClass && currentClass.includes('hidden')) {
+            return window.dash_clientside.no_update;
+        }
+        if (!figure || !figure.data) {
+            return 'map-loading-overlay';
+        }
+        var hasPoints = figure.data.some(function(t) {
+            return t.lat && t.lat.length > 0;
+        });
+        return hasPoints ? 'map-loading-overlay hidden' : 'map-loading-overlay';
+    }
+    """,
+    Output(ContainerIds.MAP_LOADING_OVERLAY, "className"),
+    Input(MapIds.GRAPH, "figure"),
+    State(ContainerIds.MAP_LOADING_OVERLAY, "className"),
+)
+
 
 def _date_to_epoch_start(date_str):
     # date_str: "YYYY-MM-DD" -> epoch at 00:00:00 UTC
@@ -142,7 +162,14 @@ def rgb_to_hex(r:int, g:int, b:int, a=None):
 def blank_map():
     fig = go.Figure()
     fig.add_trace(go.Scattermap())
-    fig.update_layout(map=map_fig_common_layout_kwargs, **map_margins)
+    fig.update_layout(
+        map=dict(
+            center=dict(lat=35.0, lon=-65.0),  # North Atlantic (WHOI operating area)
+            zoom=3.5,
+            **map_fig_common_layout_kwargs,
+        ),
+        **map_margins,
+    )
     return fig
 
 _, _, REGION_PRESETS = load_map_region_config(Path("config/map_regions.yml").resolve())
