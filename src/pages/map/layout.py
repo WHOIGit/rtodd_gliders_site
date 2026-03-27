@@ -194,7 +194,11 @@ def float_box():
         active_item='map-info',
     )
 
-    return html.Div(accordion, className="map-overlay",)
+    return html.Div(
+        accordion,
+        id=ContainerIds.MAP_OVERLAY,
+        className="map-overlay collapsed",
+    )
 
 
 
@@ -237,6 +241,13 @@ def main_layout():
         style={"position": "relative", "minHeight": 0},
     )
 
+    overlay_toggle = html.Div(
+        "≡",
+        id=ContainerIds.MAP_OVERLAY_TOGGLE,
+        className="map-overlay-toggle",
+        n_clicks=0,
+    )
+
     return html.Div(
         [
             # triggers on navigation/page-load
@@ -255,6 +266,7 @@ def main_layout():
             # UI elements
             map_div,
             float_box(),
+            overlay_toggle,
         ],
         className="flex-grow-1 d-flex",
         style={"minHeight": 0},

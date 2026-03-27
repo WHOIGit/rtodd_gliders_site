@@ -33,6 +33,22 @@ dash.register_page(
 app = dash.get_app()
 
 
+# ── Mobile overlay toggle ──
+
+@app.callback(
+    Output(ContainerIds.MAP_OVERLAY, "className"),
+    Output(ContainerIds.MAP_OVERLAY_TOGGLE, "children"),
+    Input(ContainerIds.MAP_OVERLAY_TOGGLE, "n_clicks"),
+    State(ContainerIds.MAP_OVERLAY, "className"),
+    prevent_initial_call=True,
+)
+def toggle_map_overlay(n_clicks, current_class):
+    current_class = current_class or ""
+    if "collapsed" in current_class:
+        return "map-overlay", "✕"
+    return "map-overlay collapsed", "≡"
+
+
 # ── Loading overlay: hide when map children has data layers ──
 
 clientside_callback(

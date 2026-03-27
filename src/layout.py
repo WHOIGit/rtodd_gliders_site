@@ -63,17 +63,52 @@ def make_navbar() -> dbc.Navbar:
         className="mb-0",
     )
 
-    # Clientside callback to toggle the collapse on mobile
+    # Clientside callback to toggle the collapse on mobile,
+    # and dismiss on outside click or nav-link click
     dash.clientside_callback(
         """
-        function(n_clicks, is_open) {
-            if (n_clicks > 0) { return !is_open; }
-            return is_open;
+        function(n_clicks, pathname, is_open) {
+            var triggered = window.dash_clientside.callback_context.triggered;
+            if (!triggered || !triggered.length) return is_open;
+            var prop = triggered[0].prop_id;
+
+            // Toggler button: flip open/closed
+            if (prop.indexOf('""" + NAVBAR_TOGGLE_ID + """') !== -1) {
+                return !is_open;
+            }
+
+            // Page navigation: close the menu
+            return false;
         }
         """,
         dash.Output(NAVBAR_COLLAPSE_ID, "is_open"),
         dash.Input(NAVBAR_TOGGLE_ID, "n_clicks"),
+        dash.Input(dash.dash._ID_LOCATION, "pathname"),
         dash.State(NAVBAR_COLLAPSE_ID, "is_open"),
+    )
+
+    # Close menu on outside click
+    dash.clientside_callback(
+        """
+        function(n) {
+            // Attach a one-time listener pattern for outside clicks
+            if (!window._navCollapseListener) {
+                window._navCollapseListener = true;
+                document.addEventListener('click', function(e) {
+                    var collapse = document.getElementById('""" + NAVBAR_COLLAPSE_ID + """');
+                    var toggler = document.getElementById('""" + NAVBAR_TOGGLE_ID + """');
+                    if (!collapse || !toggler) return;
+                    var isOpen = collapse.classList.contains('show');
+                    if (isOpen && !collapse.contains(e.target) && !toggler.contains(e.target)) {
+                        toggler.click();
+                    }
+                });
+            }
+            return window.dash_clientside.no_update;
+        }
+        """,
+        dash.Output(NAVBAR_TOGGLE_ID, "className"),
+        dash.Input(NAVBAR_TOGGLE_ID, "n_clicks"),
     )
 
     return navbar

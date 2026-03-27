@@ -25,6 +25,8 @@ class ControlIds:
 
 class ContainerIds:
     MAP_ACCORDION = "map-accordion"
+    MAP_OVERLAY = "map-overlay"
+    MAP_OVERLAY_TOGGLE = "map-overlay-toggle"
     HIDDEN_CUSTOMTIME_CONTAINER = "time-custom-container"
     SECTION_DETAILS = "accordion-section-details"
     MAP_LOADING_OVERLAY = "map-loading-overlay"
