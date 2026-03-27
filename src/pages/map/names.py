@@ -1,5 +1,6 @@
 class MapIds:
-    GRAPH = "map-graph"
+    MAP = "leaflet-map"
+    CLICK_STORE = "map-click-store"
 
 class StoreIds:
     MAPDATA_STORE = "map-store"
@@ -30,4 +31,3 @@ class ContainerIds:
 
 class TextIds:
     SECTION_DETAILS_TEXT = "section-details-text"
-

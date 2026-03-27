@@ -2,8 +2,17 @@ import datetime as dt
 import pandas as pd
 import numpy as np
 from pathlib import Path
+
+import dash
 from dash import html, dcc
 from dash_extensions import Purify
+
+# Shared path/URL constants for serving config assets
+CONFIG_ASSETS_DIR = Path("config/assets").resolve()
+CONFIG_ASSETS_URL_PREFIX = "/config-assets/"
+
+PORTRAITS_DIR = Path("config/assets/people-imgs").resolve()
+PORTRAITS_URL_PREFIX = "/config-assets/people-img/"
 
 
 def range_slider_marks(t_min, t_max, target_mark_count=10):
@@ -57,26 +66,52 @@ def range_slider_marks(t_min, t_max, target_mark_count=10):
     return marks
 
 
+def asset_url(filename: str, url_prefix: str = "/assets/") -> str:
+    """Build a URL for a served file, respecting the app's requests_pathname_prefix.
+
+    Args:
+        filename: The filename (e.g. "image.png").
+        url_prefix: The URL prefix where the file is served
+                    (e.g. "/assets/", "/people/img/").
+    """
+    app_prefix = dash.get_app().config['requests_pathname_prefix']
+    return app_prefix.rstrip("/") + url_prefix + filename
+
+
 def load_map_region_config(config_path):
     """
-    Load map region presets from a YAML file.
+    Load map config from a YAML file (map_config.yml).
 
     Returns:
         default_region (str): key of the default selected region
         region_options (list[dict]): RadioItems-compatible options (enabled only)
         region_presets (dict): key -> {center, zoom} for non-auto regions
+        glider_image_url (str|None): URL to serve the glider marker image
     """
     import yaml
+    config_path = Path(config_path)
     with open(config_path) as f:
         cfg = yaml.safe_load(f)
 
-    default_region = cfg.get("default", "auto")
+    # Resolve glider_image: check src/assets/ first, then config/assets/
+    glider_image_url = None
+    glider_image = cfg.get("glider_image")
+    if glider_image:
+        assets_dir = Path(dash.get_app().config.get("assets_folder", "assets")).resolve()
+        if (CONFIG_ASSETS_DIR / glider_image).exists():
+            glider_image_url = asset_url(glider_image, CONFIG_ASSETS_URL_PREFIX)
+        elif (assets_dir / glider_image).exists():
+            glider_image_url = asset_url(glider_image, "/assets/")
+
+    default_region = None
     region_options = []
     region_presets = {}
 
     for key, val in cfg.get("regions", {}).items():
         if not val.get("enabled", True):
             continue
+        if val.get("default", False):
+            default_region = key
         region_options.append({"label": val["label"], "value": key})
         if key != "auto":
             region_presets[key] = {
@@ -84,7 +119,10 @@ def load_map_region_config(config_path):
                 "zoom": val["zoom"],
             }
 
-    return default_region, region_options, region_presets
+    if default_region is None:
+        default_region = "auto"
+
+    return default_region, region_options, region_presets, glider_image_url
 
 
 def latlon_offset(lat, lon, v_dy, u_dx, scale=1):

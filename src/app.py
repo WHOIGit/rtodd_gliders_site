@@ -11,6 +11,7 @@ from flask import send_from_directory, abort
 
 from layout import create_layout
 from names import *
+from utils import CONFIG_ASSETS_DIR, CONFIG_ASSETS_URL_PREFIX, PORTRAITS_DIR, PORTRAITS_URL_PREFIX
 
 external_stylesheets = [dbc.themes.BOOTSTRAP,
     "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css",
@@ -45,11 +46,19 @@ app.layout = create_layout
 
 server = app.server
 
-PORTRAITS_DIR = Path("config/people-imgs").resolve()
-PORTRAITS_URL_PREFIX = "/people/img/"
-
 # Optional: only allow typical image extensions
 ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+
+@server.get(CONFIG_ASSETS_URL_PREFIX+"<path:filename>")
+def config_assets(filename: str):
+    p = (CONFIG_ASSETS_DIR / filename).resolve()
+    if CONFIG_ASSETS_DIR not in p.parents and p != CONFIG_ASSETS_DIR:
+        abort(404)
+    if p.suffix.lower() not in ALLOWED_EXTS:
+        abort(404)
+    if not p.exists() or not p.is_file():
+        abort(404)
+    return send_from_directory(CONFIG_ASSETS_DIR, filename)
 
 @server.get(PORTRAITS_URL_PREFIX+"<path:filename>")
 def people_portraits(filename: str):

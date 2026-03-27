@@ -7,10 +7,10 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 import dash
-from dash import Input, Output, State, no_update, html, clientside_callback
+from dash import Input, Output, State, no_update, html, clientside_callback, ALL
 import numpy as np
 
-import plotly.graph_objects as go
+import dash_leaflet as dl
 import pandas as pd
 
 # Dash pages expects a `layout` variable in the module
@@ -18,7 +18,7 @@ from dash.exceptions import PreventUpdate
 
 from data_loader import GliderDataLoader
 from utils import latlon_offset, load_map_region_config
-from .layout import layout
+from .layout import layout, TILE_URL
 from names import *
 from .names import *
 
@@ -32,34 +32,24 @@ dash.register_page(
 
 app = dash.get_app()
 
-map_margins = dict(margin=dict(l=0, r=0, t=0, b=0))
-map_fig_common_layout_kwargs = dict(
-    #style="white-bg",
-    layers=[dict(
-        below="traces",
-        sourcetype="raster",
-        source=[
-            "https://services.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}"
-        ])],
-)
+
+# ── Loading overlay: hide when map children has data layers ──
 
 clientside_callback(
     """
-    function(figure, currentClass) {
+    function(children, currentClass) {
         if (currentClass && currentClass.includes('hidden')) {
             return window.dash_clientside.no_update;
         }
-        if (!figure || !figure.data) {
+        // children[0] is TileLayer, [1] is ZoomControl; data layers come after
+        if (!children || children.length <= 2) {
             return 'map-loading-overlay';
         }
-        var hasPoints = figure.data.some(function(t) {
-            return t.lat && t.lat.length > 0;
-        });
-        return hasPoints ? 'map-loading-overlay hidden' : 'map-loading-overlay';
+        return 'map-loading-overlay hidden';
     }
     """,
     Output(ContainerIds.MAP_LOADING_OVERLAY, "className"),
-    Input(MapIds.GRAPH, "figure"),
+    Input(MapIds.MAP, "children"),
     State(ContainerIds.MAP_LOADING_OVERLAY, "className"),
 )
 
@@ -146,11 +136,6 @@ def set_active_time_button(active_btn_id):
 
 
 def rgb_to_hex(r:int, g:int, b:int, a=None):
-    """
-    Convert RGBA to HEX.
-    r, g, b : int [0–255]
-    a       : float [0–1]
-    """
     if a is None:
         return "#{:02X}{:02X}{:02X}".format(
             int(r), int(g), int(b) )
@@ -159,22 +144,23 @@ def rgb_to_hex(r:int, g:int, b:int, a=None):
             int(r), int(g), int(b), int(a * 255))
 
 
-def blank_map():
-    fig = go.Figure()
-    fig.add_trace(go.Scattermap())
-    fig.update_layout(
-        map=dict(
-            center=dict(lat=35.0, lon=-65.0),  # North Atlantic (WHOI operating area)
-            zoom=3.5,
-            **map_fig_common_layout_kwargs,
-        ),
-        **map_margins,
-    )
-    return fig
+_, _, REGION_PRESETS, _GLIDER_IMAGE_URL = load_map_region_config(Path("config/map_config.yml").resolve())
 
-_, _, REGION_PRESETS = load_map_region_config(Path("config/map_regions.yml").resolve())
+GLIDER_ICON = dict(
+    iconUrl=_GLIDER_IMAGE_URL or "SprayGliderTail.png",
+    iconSize=[40, 40],
+    iconAnchor=[20, 20],
+)
 
-def _build_map_fig(latlon_records, uv_records, time_range, uv_scale, region_key):
+
+def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region_key):
+    """Build dash-leaflet children, bounds, and legend for the map.
+
+    Returns (children, bounds, legend_children) where:
+      children: list of dl components (Polyline, Marker, LayerGroup)
+      bounds: [[south, west], [north, east]] or None
+      legend_items: list of (glider_sn, color_hex) for legend
+    """
     COLOR_CYCLE = cycle([
         ( 31, 119, 180), # blue
         (255, 127,  14), # orange
@@ -184,12 +170,13 @@ def _build_map_fig(latlon_records, uv_records, time_range, uv_scale, region_key)
         (140,  86,  75), # brown
     ])
 
-    fig = go.Figure()
-    maxlat, minlat, maxlon, minlon = -180,180,-180,180
+    children = []
+    legend_items = []
+    maxlat, minlat, maxlon, minlon = -180, 180, -180, 180
+
     for glider_sn, records in latlon_records.items():
         color_rgb = next(COLOR_CYCLE)
         color_hex = rgb_to_hex(*color_rgb)
-        legendgroup = f"Spray {glider_sn}"
 
         df = pd.DataFrame(records)
         df['dt'] = df.time.apply(lambda x: pd.NaT if np.isnan(x) else dt.datetime.utcfromtimestamp(x/1))
@@ -207,6 +194,8 @@ def _build_map_fig(latlon_records, uv_records, time_range, uv_scale, region_key)
         if df.empty:
             continue
 
+        legend_items.append((glider_sn, color_hex))
+
         # set map bounds
         minlat = min(minlat, float(df["lat"].min()))
         maxlat = max(maxlat, float(df["lat"].max()))
@@ -214,38 +203,20 @@ def _build_map_fig(latlon_records, uv_records, time_range, uv_scale, region_key)
         maxlon = max(maxlon, float(df["lon"].max()))
 
         for section, df_sec in df.groupby("section", sort=False):
-            customdata = list(
-                zip(
-                    [glider_sn]*len(df_sec),
-                    df_sec["section"],  # customdata[1]
-                    df_sec["dt"].dt.date.astype(str),  # customdata[2]
-                    df_sec["dt"].dt.time.astype(str),  # customdata[3]
-                    df_sec["ndive"],  # customdata[4]
-                )
-            )
-            opacity = opacities[section-1]
-            color = 'rgba({},{},{},{})'.format(*color_rgb, opacity)
-            fig.add_trace(
-                go.Scattermap(
-                    lat=df_sec["lat"],
-                    lon=df_sec["lon"],
-                    mode="lines", # markers+lines
-                    name=f"Spray {glider_sn}",
-                    legendgroup=legendgroup,  # or f"{glider_sn}"
-                    marker=dict(size=6, color=color),
-                    line=dict(width=3, color=color),
-                    hovertemplate=(
-                        "<b>Glider %{customdata[0]}</b><br>"
-                        "Lat: %{lat}<br>"
-                        "Lon: %{lon}<br>"
-                        "Date: %{customdata[2]}<br>"
-                        "Time: %{customdata[3]}<br>"
-                        "Section: %{customdata[1]}<br>"
-                        "NDive: %{customdata[4]}<br>"
-                        "<extra></extra>"
-                    ),
-                    customdata=customdata,
-                    showlegend=bool(opacity == 1),
+            opacity = float(opacities[section-1])
+            positions = list(zip(
+                df_sec["lat"].tolist(),
+                df_sec["lon"].tolist(),
+            ))
+
+            children.append(
+                dl.Polyline(
+                    positions=positions,
+                    color=color_hex,
+                    opacity=opacity,
+                    weight=3,
+                    id={"type": "track-segment", "index": f"{glider_sn}-{section}"},
+                    children=dl.Tooltip(f"Spray {glider_sn} \u2014 Section {section}"),
                 )
             )
 
@@ -258,94 +229,72 @@ def _build_map_fig(latlon_records, uv_records, time_range, uv_scale, region_key)
                 start, end = time_range
                 df_uv = df_uv[(df_uv["time"] >= start) & (df_uv["time"] <= end)]
 
+            uv_lines = []
             for section, df_uv_sec in df_uv.groupby("section", sort=False):
+                opacity = float(opacities[section - 1])
 
-                opacity = opacities[section - 1]
-                color = 'rgba({},{},{},{})'.format(*color_rgb, opacity)
-
-                vlats, ulons = [], []
                 for _, row in df_uv_sec.iterrows():
                     lat, lon = row["lat"], row["lon"]
-                    vlat,ulon = latlon_offset(lat, lon, row["v"], row["u"], uv_scale)
-                    ulons += [lon, ulon, None]
-                    vlats += [lat, vlat, None]
+                    vlat, ulon = latlon_offset(lat, lon, row["v"], row["u"], uv_scale)
+                    uv_lines.append(
+                        dl.Polyline(
+                            positions=[[lat, lon], [vlat, ulon]],
+                            color=color_hex,
+                            opacity=opacity,
+                            weight=1,
+                            interactive=False,
+                        )
+                    )
 
-                fig.add_trace(go.Scattermap(
-                    lat=vlats,
-                    lon=ulons,
-                    name=f"Spray {glider_sn} UV",
-                    legendgroup=legendgroup,
-                    showlegend=False,
-                    hoverinfo="skip",
-                    mode="lines",
-                    line=dict(width=1, color=color), # argh, no OPACITY
-                ))
+            if uv_lines:
+                children.append(dl.LayerGroup(children=uv_lines))
 
-        # image at end of trace
-        end = df.iloc[-1]
-        fig.add_trace(go.Scattermap(
-            lat=[end["lat"]],
-            lon=[end["lon"]],
-            name=f"Spray {glider_sn} Endpoint",
-            mode="markers",
-            marker=dict(
-                size=30,
-                symbol=f"star",
-            ),
-            legendgroup = legendgroup,
-            showlegend=False,
-            hovertemplate=(
-                "<b>Glider %{customdata[0]}</b><br>"
-                "Lat: %{lat}<br>"
-                "Lon: %{lon}<br>"
-                "Date: %{customdata[2]}<br>"
-                "Time: %{customdata[3]}<br>"
-                "Section: %{customdata[1]}<br>"
-                "NDive: %{customdata[4]}<br>"
-                "<extra></extra>"
-            ),
-            customdata=[customdata[-1]]
-        ))
+        # endpoint marker with custom icon
+        end_row = df.iloc[-1]
+        end_date_str = str(end_row["dt"].date()) if pd.notna(end_row["dt"]) else "N/A"
+        end_time_str = str(end_row["dt"].time()) if pd.notna(end_row["dt"]) else "N/A"
+        end_section = end_row.get("section", "N/A")
+        end_ndive = end_row.get("ndive", "N/A")
 
-    if not fig.data:
-        return fig
+        children.append(
+            dl.Marker(
+                position=[float(end_row["lat"]), float(end_row["lon"])],
+                icon=GLIDER_ICON,
+                id={"type": "glider-endpoint", "index": str(glider_sn)},
+                children=dl.Tooltip(
+                    f"Spray {glider_sn}\n"
+                    f"Lat: {end_row['lat']:.4f}, Lon: {end_row['lon']:.4f}\n"
+                    f"Date: {end_date_str} {end_time_str}\n"
+                    f"Section: {end_section}, NDive: {end_ndive}"
+                ),
+            )
+        )
 
-    # Set Center and Zoom
-    if region_key == 'auto':
-        max_bound = max(abs(maxlon - minlon), abs(maxlat - minlat)) * 111
-        zoom = 12 - np.log(max_bound)
-        center = dict(lat=(maxlat + minlat) / 2, lon=(maxlon + minlon) / 2)
-    else:
-        region_preset = REGION_PRESETS.get(region_key, REGION_PRESETS["global"])
-        center = region_preset["center"]
-        zoom = region_preset["zoom"]
+    if not children:
+        return [], None, []
 
-    legend_layout = dict(
-        x=0.99,
-        y=0.96,
-        xanchor="right",
-        yanchor="top",
-        bgcolor="rgba(255,255,255,0.7)",
-        bordercolor="rgba(0,0,0,0.2)",
-        borderwidth=1,
-        orientation="v",
-    )
+    bounds = [[minlat, minlon], [maxlat, maxlon]]
+    return children, bounds, legend_items
 
-    fig.update_layout(
-        map=dict(
-            center=center,
-            zoom=zoom,
-            **map_fig_common_layout_kwargs,
-        ),
-        legend = legend_layout,
-        **map_margins,
-    )
 
-    return fig
+def _viewport_for_bounds(bounds):
+    """Create a viewport dict that fits the given bounds with padding."""
+    return {"bounds": bounds, "transition": "fitBounds"}
+
+
+def _viewport_for_preset(region_key):
+    """Create a viewport dict for a named region preset."""
+    preset = REGION_PRESETS.get(region_key, REGION_PRESETS["global"])
+    return {
+        "center": [preset["center"]["lat"], preset["center"]["lon"]],
+        "zoom": preset["zoom"],
+        "transition": "flyTo",
+    }
 
 
 @app.callback(
-    Output(MapIds.GRAPH, "figure"),
+    Output(MapIds.MAP, "children"),
+    Output(MapIds.MAP, "viewport"),
     Output(AlertIds.BANNER, "is_open"),
     Output(AlertIds.BANNER, "children"),
     Input(StoreIds.MAPDATA_STORE, "data"),
@@ -359,12 +308,19 @@ def update_map(store_data, time_range, uv_scale, region_key):
     latlon_records = store_data.get("latlon_records", {})
     uv_records = store_data.get("uv_records", {})
 
+    tile = dl.TileLayer(url=TILE_URL)
+    zoom_ctrl = dl.ZoomControl(position="bottomright")
+
     if not latlon_records:
-        return blank_map(), False, ""
+        vp = _viewport_for_preset(region_key) if region_key != 'auto' else no_update
+        return [tile, zoom_ctrl], vp, False, ""
 
-    fig = _build_map_fig(latlon_records, uv_records, time_range, uv_scale, region_key)
+    data_children, bounds, _ = _build_map_children(
+        latlon_records, uv_records, time_range, uv_scale, region_key
+    )
 
-    if not fig.data:
+    if not data_children:
+        # No data for this time range — try shifting to last available data
         if time_range:
             start, end = time_range
             window = end - start
@@ -373,29 +329,34 @@ def update_map(store_data, time_range, uv_scale, region_key):
                 for r in records if r.get("time") is not None and not np.isnan(r["time"])
             )
             shifted_range = [last_ts - window, last_ts]
-            fig = _build_map_fig(latlon_records, uv_records, shifted_range, uv_scale, region_key)
-            if fig.data:
+            data_children, bounds, _ = _build_map_children(
+                latlon_records, uv_records, shifted_range, uv_scale, region_key
+            )
+            if data_children:
                 last_dt = dt.datetime.utcfromtimestamp(last_ts).strftime("%Y-%m-%d")
-                return fig, True, f"No data found for the selected time range. Showing the same time window ending at the last available data ({last_dt})."
-        return blank_map(), False, ""
+                all_children = [tile, zoom_ctrl] + data_children
+                vp = _viewport_for_bounds(bounds) if region_key == 'auto' else _viewport_for_preset(region_key)
+                return all_children, vp, True, \
+                    f"No data found for the selected time range. Showing the same time window ending at the last available data ({last_dt})."
 
-    return fig, False, ""
+        vp = _viewport_for_preset(region_key) if region_key != 'auto' else no_update
+        return [tile, zoom_ctrl], vp, False, ""
+
+    all_children = [tile, zoom_ctrl] + data_children
+
+    if region_key == 'auto':
+        return all_children, _viewport_for_bounds(bounds), False, ""
+    else:
+        return all_children, _viewport_for_preset(region_key), False, ""
+
 
 def source_version():
     gdl = GliderDataLoader(data_dir=Path("./data"))
-    latest_mtime = gdl.latest_filemodified_timestamp()  # no auto_load needed, just reads file mtimes
-    #print(latest_mtime, type(latest_mtime))
+    latest_mtime = gdl.latest_filemodified_timestamp()
     return latest_mtime
 
 
 def load_mapdata_from_source():
-    """
-    Return a dict shaped like:
-    {
-      "latlon_records": { "<sn>": [ {"lat":..., "lon":..., "time":...}, ... ], ... },
-      "uv_records": { "<sn>": [ {"lat":..., "lon":..., "time":..., "u":..., "v":...}, ... ], ... },
-    }
-    """
     gdl = GliderDataLoader(data_dir=Path("./data"), auto_load=True)
     latlon_records, uv_records = {}, {}
     for sn in gdl.glider_sns():
@@ -421,7 +382,7 @@ def load_mapdata_from_source():
 def default_timerange_seconds(days_back=7):
     now = int(time.time())
     start = now - days_back * 24 * 3600
-    return start, now  # match your existing update_map expectation
+    return start, now
 
 
 @app.callback(
@@ -433,7 +394,6 @@ def default_timerange_seconds(days_back=7):
 )
 def init_mapdata_on_session(pathname, init_state):
     version = source_version()
-    #print("MAP PAGE: session init, is initialized?", init_state, version)
 
     # Already initialized → do nothing
     if init_state['initialized'] and version == init_state['version']:
@@ -488,7 +448,6 @@ def populate_section_details(glider_sn, section_num, store_data):
     if not glider_sn:
         return "Select a glider to see details."
     store_data = store_data or {}
-    # dict_keys(['latlon_records', 'uv_records'])
 
     url_realtime_pattern = 'https://gliders.whoi.edu/data/realtime/{:04d}.html'
     url_pattern = 'https://gliders.whoi.edu/data/figs/realtime/{SN:04d}/{KEY}_{SECTION}.png'
@@ -536,24 +495,55 @@ def populate_section_details(glider_sn, section_num, store_data):
     return details
 
 def get_sections_for_glider(store_data, glider_sn):
-    # TEMPLATE: replace with your real source.
     latlon_records = (store_data or {}).get("latlon_records", {})
     recs = latlon_records.get(glider_sn, [])
     secs = sorted({int(r["section"]) for r in recs if "section" in r and r["section"] is not None})
     return secs
+
+
+# ── Click handler: relay track/endpoint clicks to a store ──
+
+@app.callback(
+    Output(MapIds.CLICK_STORE, "data"),
+    Input({"type": "track-segment", "index": ALL}, "n_clicks"),
+    Input({"type": "glider-endpoint", "index": ALL}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def on_map_element_click(track_clicks, endpoint_clicks):
+    triggered = dash.ctx.triggered_id
+    if triggered is None:
+        raise PreventUpdate
+
+    # When map children are rebuilt, this callback fires with all n_clicks
+    # as None. Only proceed if the triggered prop actually has a real click.
+    triggered_prop = dash.ctx.triggered[0]
+    if not triggered_prop.get("value"):
+        raise PreventUpdate
+
+    idx = triggered["index"]
+    if triggered["type"] == "track-segment":
+        parts = idx.rsplit("-", 1)
+        glider_sn = parts[0]
+        section = int(parts[1]) if len(parts) > 1 else None
+        return {"glider": glider_sn, "section": section}
+    elif triggered["type"] == "glider-endpoint":
+        return {"glider": idx, "section": None}
+
+    raise PreventUpdate
+
 
 @app.callback(
     Output(ControlIds.GLIDER_SELECT, "value"),
     Output(ControlIds.SECTION_SELECT, "options"),
     Output(ControlIds.SECTION_SELECT, "value"),
     Output(ContainerIds.MAP_ACCORDION, "active_item"),
-    Input(MapIds.GRAPH, "clickData"),
+    Input(MapIds.CLICK_STORE, "data"),
     Input(ControlIds.GLIDER_SELECT, "value"),
     State(StoreIds.MAPDATA_STORE, "data"),
     State(ContainerIds.MAP_ACCORDION, "active_item"),
     prevent_initial_call=True,
 )
-def sync_section_ui(clickData, glider_value, store_data, active_item):
+def sync_section_ui(click_data, glider_value, store_data, active_item):
     trig = dash.ctx.triggered_id
 
     # Defaults: don't change unless we decide to
@@ -561,20 +551,12 @@ def sync_section_ui(clickData, glider_value, store_data, active_item):
     new_section_value = no_update
     new_active = no_update
 
-    # Determine glider + section from click if that's the trigger
-    clicked_glider = None
-    clicked_section = None
-    if trig == MapIds.GRAPH:
-        if not clickData or not clickData.get("points"):
+    if trig == MapIds.CLICK_STORE:
+        if not click_data:
             raise PreventUpdate
-        cd = clickData["points"][0].get("customdata")
-        if not cd or len(cd) < 2:
-            raise PreventUpdate
-        clicked_glider = str(cd[0])
-        try:
-            clicked_section = int(cd[1])
-        except Exception:
-            clicked_section = None
+
+        clicked_glider = str(click_data["glider"])
+        clicked_section = click_data.get("section")
 
         new_glider = clicked_glider
         new_section_value = clicked_section
@@ -587,14 +569,11 @@ def sync_section_ui(clickData, glider_value, store_data, active_item):
     else:
         # manual glider dropdown change -> just update section options
         if not glider_value:
-            # no glider -> clear sections
             return glider_value, [], None, no_update
 
         glider_for_options = str(glider_value)
         new_glider = glider_for_options
-        # don't open accordion just because dropdown changed
         new_active = no_update
-        # keep section value as-is (Dash may clear it if not in new options)
         new_section_value = no_update
 
     # Build section options for the chosen glider
@@ -602,11 +581,9 @@ def sync_section_ui(clickData, glider_value, store_data, active_item):
     opts = [{"label": str(s), "value": s} for s in sections]
 
     # If click provided a section, ensure it's present in options so value sticks
-    if trig == MapIds.GRAPH and clicked_section is not None and clicked_section not in sections:
-        opts = [{"label": str(clicked_section), "value": clicked_section}] + opts
+    if trig == MapIds.CLICK_STORE and click_data and click_data.get("section") is not None:
+        clicked_section = click_data["section"]
+        if clicked_section not in sections:
+            opts = [{"label": str(clicked_section), "value": clicked_section}] + opts
 
     return new_glider, opts, new_section_value, new_active
-
-
-
-

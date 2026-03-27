@@ -4,15 +4,23 @@ from pathlib import Path
 import dash
 from dash import html, dcc
 import dash_bootstrap_components as dbc
+import dash_leaflet as dl
 
 from .names import *
 from utils import load_map_region_config
 
-_default_region, _region_options, _ = load_map_region_config(
-    Path("config/map_regions.yml").resolve()
+_default_region, _region_options, _region_presets, _ = load_map_region_config(
+    Path("config/map_config.yml").resolve()
 )
 
+# Initial center/zoom from the default region preset
+_init_preset = _region_presets.get(_default_region, {"center": {"lat": 35.0, "lon": -65.0}, "zoom": 4})
+_init_center = [_init_preset["center"]["lat"], _init_preset["center"]["lon"]]
+_init_zoom = _init_preset["zoom"]
+
 app = dash.get_app()
+
+TILE_URL = "https://services.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}"
 
 
 def intro_div():
@@ -52,7 +60,7 @@ def options_div():
                 clearable=True,
             ),
             html.Div(
-                "Tip: leave End blank to use ‘now’",
+                "Tip: leave End blank to use 'now'",
                 className="text-muted small mt-1",
             ),
         ],
@@ -200,7 +208,7 @@ def main_layout():
             html.Div(
                 [
                     html.Div(className="map-loading-overlay__spinner"),
-                    "Loading map…",
+                    "Loading map\u2026",
                 ],
                 className="map-loading-overlay__label",
             )
@@ -209,20 +217,20 @@ def main_layout():
         className="map-loading-overlay",
     )
 
-    map_loading = dcc.Loading(
-        id="map-loading",
-        type="circle",
-        children=dcc.Graph(
-            id=MapIds.GRAPH,
-            style={"height": "100%", "width": "100%"},
-            config={"displayModeBar": True, "responsive": True},
-        ),
-        parent_className="flex-grow-1 d-flex flex-column",
-        parent_style={"minHeight": 0},
+    leaflet_map = dl.Map(
+        id=MapIds.MAP,
+        children=[
+            dl.TileLayer(url=TILE_URL),
+            dl.ZoomControl(position="bottomright"),
+        ],
+        center=_init_center,
+        zoom=_init_zoom,
+        zoomControl=False,
+        style={"height": "100%", "width": "100%"},
     )
 
     map_div = html.Div(
-        [map_loading, loading_overlay],
+        [leaflet_map, loading_overlay],
         className="flex-grow-1 d-flex flex-column",
         style={"position": "relative", "minHeight": 0},
     )
@@ -239,6 +247,9 @@ def main_layout():
             dcc.Store(id=StoreIds.TIMERANGE_STORE, storage_type="session", data=[start, now]),
             dcc.Store(id=StoreIds.TIMEBTN_ACTIVE_STORE, storage_type="session", data=ControlIds.TIME_BTN_MONTH),
 
+            # click relay store
+            dcc.Store(id=MapIds.CLICK_STORE, data=None),
+
             # UI elements
             map_div,
             float_box(),
@@ -248,4 +259,3 @@ def main_layout():
     )
 
 layout = main_layout()
-
