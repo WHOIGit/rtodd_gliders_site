@@ -226,6 +226,8 @@ def main_layout():
         center=_init_center,
         zoom=_init_zoom,
         zoomControl=False,
+        #wheelDebounceTime=0,
+        wheelPxPerZoomLevel=120,
         style={"height": "100%", "width": "100%"},
     )
 

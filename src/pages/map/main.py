@@ -220,7 +220,13 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region
                     opacity=opacity,
                     weight=3,
                     id={"type": "track-segment", "index": f"{glider_sn}-{section}"},
-                    children=dl.Tooltip(f"Spray {glider_sn} \u2014 Section {section}"),
+                    children=dl.Tooltip(
+                        html.Div([
+                            html.B(f"Spray {glider_sn}"),
+                            html.Br(),
+                            f"Section {section}",
+                        ]),
+                    ),
                 )
             )
 
@@ -267,10 +273,15 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region
                 icon=GLIDER_ICON,
                 id={"type": "glider-endpoint", "index": str(glider_sn)},
                 children=dl.Tooltip(
-                    f"Spray {glider_sn}\n"
-                    f"Lat: {end_row['lat']:.4f}, Lon: {end_row['lon']:.4f}\n"
-                    f"Date: {end_date_str} {end_time_str}\n"
-                    f"Section: {end_section}, NDive: {end_ndive}"
+                    html.Div([
+                        html.B(f"Spray {glider_sn}"),
+                        html.Br(),
+                        f"Lat: {end_row['lat']:.4f}, Lon: {end_row['lon']:.4f}",
+                        html.Br(),
+                        f"Date: {end_date_str} {end_time_str}",
+                        html.Br(),
+                        f"Section: {end_section}, Dive: {end_ndive}",
+                    ]),
                 ),
             )
         )
