@@ -12,7 +12,7 @@ def _dive_input(id_, prev_id, next_id, placeholder="Dive #"):
             min=1,
             placeholder=placeholder,
             className="form-control text-center",
-            style={"textAlign": "center"},
+            style={"textAlign": "center", "lineHeight": "normal", "height": "38px"},
             debounce=True,
         ),
         dbc.Button("▲", id=next_id, color="secondary", outline=True, size="sm"),
