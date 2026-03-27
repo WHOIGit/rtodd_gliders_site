@@ -182,6 +182,7 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region
         df['dt'] = df.time.apply(lambda x: pd.NaT if np.isnan(x) else dt.datetime.utcfromtimestamp(x/1))
         if df.empty or not {"lat", "lon"}.issubset(df.columns):
             continue
+        df = df.dropna(subset=["lat", "lon"])
 
         num_of_sections = len(set(df.section))
         opacities = np.linspace(0.2, 1, num_of_sections) if num_of_sections > 1 else [1.0]
@@ -209,6 +210,9 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region
                 df_sec["lon"].tolist(),
             ))
 
+            if len(positions) < 2:
+                continue
+
             children.append(
                 dl.Polyline(
                     positions=positions,
@@ -224,6 +228,7 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region
         if uv_records and glider_sn in uv_records:
             uv_recs = uv_records[glider_sn]
             df_uv = pd.DataFrame(uv_recs)
+            df_uv = df_uv.dropna(subset=["lat", "lon", "u", "v"])
 
             if time_range and "time" in df_uv.columns:
                 start, end = time_range
