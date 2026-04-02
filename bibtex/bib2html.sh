@@ -18,7 +18,7 @@ pandoc "$SCRIPTROOT/frontmatter.md" --bibliography="$INPUTBIB" --csl="$SCRIPTROO
 
 # reformat.py is a custom Python script that further processes the generated HTML file
 #  (1) groups entries by year applies
-#  (2) neatens the he doi links
+#  (2) neatens the doi links
 #  (3) Bolds
 python3 "$SCRIPTROOT/reformat.py" "$OUTPUTHTML" --bold "$SCRIPTROOT/input/bold_authors.txt" --rm-html-body -o "$OUTPUTHTML"
 
