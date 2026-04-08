@@ -20,4 +20,4 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY src/ /app/src/
 
 ENV PYTHONPATH=/app/src
-CMD ["gunicorn", "-b", "0.0.0.0:8050", "src.app:server"]
+CMD ["gunicorn", "--preload", "-b", "0.0.0.0:8050", "src.app:server"]

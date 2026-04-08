@@ -382,10 +382,26 @@ def update_map(store_data, time_range, uv_scale, region_key):
         return all_children, _viewport_for_preset(region_key), False, ""
 
 
+_mapdata_cache: dict = {"version": None, "data": None}
+
+
 def source_version():
     gdl = GliderDataLoader(data_dir=Path("./data"))
-    latest_mtime = gdl.latest_filemodified_timestamp()
-    return latest_mtime
+    files = gdl.files_available()
+    if not files:
+        return "0"
+    latest = max((gdl.data_dir / f).stat().st_mtime for f in files)
+    return dt.datetime.fromtimestamp(latest).isoformat(timespec='seconds')
+
+
+def load_mapdata(version: str) -> dict:
+    """Return mapdata from the module-level cache, recomputing only when version changes."""
+    if _mapdata_cache["version"] == version:
+        return _mapdata_cache["data"]
+    data = load_mapdata_from_source()
+    _mapdata_cache["version"] = version
+    _mapdata_cache["data"] = data
+    return data
 
 
 def load_mapdata_from_source():
@@ -431,8 +447,7 @@ def init_mapdata_on_session(pathname, init_state):
     if init_state['initialized'] and version == init_state['version']:
         raise PreventUpdate
 
-    # Load once
-    mapdata = load_mapdata_from_source()
+    mapdata = load_mapdata(version)
 
     return mapdata, dict(initialized=True, version=version)
 

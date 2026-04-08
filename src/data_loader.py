@@ -33,7 +33,7 @@ class GliderDataLoader:
             return []
         files = []
         for f in sorted(self.data_dir.iterdir()):
-            if not (f.is_file() and f.suffix.lower() == ".json"):
+            if not (f.is_file() and f.name.endswith("_processed.json")):
                 continue
             if self.active_sns is not None:
                 try:
