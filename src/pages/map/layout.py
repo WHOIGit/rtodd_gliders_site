@@ -260,6 +260,9 @@ def main_layout():
             dcc.Store(id=StoreIds.TIMERANGE_STORE, storage_type="session", data=[start, now]),
             dcc.Store(id=StoreIds.TIMEBTN_ACTIVE_STORE, storage_type="session", data=ControlIds.TIME_BTN_MONTH),
 
+            # periodic check for updated data files
+            dcc.Interval(id=IntervalIds.DATA_REFRESH, interval=5 * 60 * 1000, n_intervals=0),
+
             # click relay store
             dcc.Store(id=MapIds.CLICK_STORE, data=None),
 

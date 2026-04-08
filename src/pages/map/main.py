@@ -1,5 +1,6 @@
 from itertools import cycle
 import logging
+import threading
 import time
 import datetime as dt
 from pathlib import Path
@@ -384,6 +385,49 @@ def update_map(store_data, time_range, uv_scale, region_key):
 
 _mapdata_cache: dict = {"version": None, "data": None}
 
+DATA_RELOAD_INTERVAL = 300  # seconds between background version checks
+_reload_thread: threading.Thread | None = None
+_reload_lock = threading.Lock()
+
+
+def _background_reload(interval: int):
+    """Daemon thread: reload _mapdata_cache when data files change."""
+    while True:
+        time.sleep(interval)
+        try:
+            version = source_version()
+            if _mapdata_cache["version"] == version:
+                continue
+            logger.info(f"Data files changed ({_mapdata_cache['version']} → {version}), reloading...")
+            data = load_mapdata_from_source()
+            _mapdata_cache["data"] = data
+            _mapdata_cache["version"] = source_version()
+            logger.info("Background data reload complete.")
+        except Exception:
+            logger.exception("Background data reload failed")
+
+
+def _ensure_reload_thread():
+    """Start the background reload thread if not already running.
+
+    Gunicorn workers do not inherit threads across fork, so this is called
+    lazily on the first callback invocation in each worker process.
+    """
+    global _reload_thread
+    if _reload_thread is not None and _reload_thread.is_alive():
+        return
+    with _reload_lock:
+        if _reload_thread is not None and _reload_thread.is_alive():
+            return
+        _reload_thread = threading.Thread(
+            target=_background_reload,
+            args=(DATA_RELOAD_INTERVAL,),
+            daemon=True,
+            name="mapdata-reload",
+        )
+        _reload_thread.start()
+        logger.info(f"Started background data reload thread (interval={DATA_RELOAD_INTERVAL}s)")
+
 
 def source_version():
     gdl = GliderDataLoader(data_dir=Path("./data"))
@@ -396,10 +440,14 @@ def source_version():
 
 def load_mapdata(version: str) -> dict:
     """Return mapdata from the module-level cache, recomputing only when version changes."""
-    if _mapdata_cache["version"] == version:
+    if _mapdata_cache["data"] is not None:
+        if _mapdata_cache["version"] != version:
+            logger.info(f"Data version changed ({_mapdata_cache['version']} → {version}); serving current cache.")
         return _mapdata_cache["data"]
     data = load_mapdata_from_source()
-    _mapdata_cache["version"] = version
+    # Read version after loading so the stored version reflects file state at completion,
+    # not at the start of a potentially long load (avoids mtime race on next check).
+    _mapdata_cache["version"] = source_version()
     _mapdata_cache["data"] = data
     return data
 
@@ -441,6 +489,7 @@ def default_timerange_seconds(days_back=7):
     prevent_initial_call=False,   # run on first load
 )
 def init_mapdata_on_session(pathname, init_state):
+    _ensure_reload_thread()
     version = source_version()
 
     # Already initialized → do nothing
@@ -450,6 +499,21 @@ def init_mapdata_on_session(pathname, init_state):
     mapdata = load_mapdata(version)
 
     return mapdata, dict(initialized=True, version=version)
+
+
+@app.callback(
+    Output(StoreIds.MAPDATA_STORE, "data", allow_duplicate=True),
+    Output(StoreIds.MAPDATA_STORE_STATE, "data", allow_duplicate=True),
+    Input(IntervalIds.DATA_REFRESH, "n_intervals"),
+    State(StoreIds.MAPDATA_STORE_STATE, "data"),
+    prevent_initial_call=True,
+)
+def refresh_mapdata_on_interval(n_intervals, init_state):
+    version = source_version()
+    if init_state.get("version") == version:
+        raise PreventUpdate
+    logger.info(f"Interval refresh: pushing new data version {version} to client.")
+    return load_mapdata(version), dict(initialized=True, version=version)
 
 
 @app.callback(

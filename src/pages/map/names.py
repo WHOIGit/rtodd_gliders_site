@@ -33,3 +33,6 @@ class ContainerIds:
 
 class TextIds:
     SECTION_DETAILS_TEXT = "section-details-text"
+
+class IntervalIds:
+    DATA_REFRESH = "data-refresh-interval"
