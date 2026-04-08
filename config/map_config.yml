@@ -1,4 +1,4 @@
-glider_image: "SprayGliderTail.png"
+glider_image: "glider-icon.png"
 
 regions:
   auto:
