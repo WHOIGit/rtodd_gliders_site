@@ -2,7 +2,7 @@ current_members:
   - name: Robert E. Todd
     role: Associate Scientist, Principal Investigator
     image: rtodd.jpg
-    blurb:
+    blurb: Robert is a physical oceanographer at WHOI whose research largely focuses on boundary current systems and and upper ocean processes. After undergradute work at North Carolina State University and graduate work at the Scripps Institution of Oceanography, he came to WHOI in 2011 and has been here ever since. Outside of work, Robert enjoys running, sailing, photography, and traveling with his wife and two kiddos.
     email: rtodd@whoi.edu
     website: https://rtodd.whoi.edu
 
@@ -14,7 +14,7 @@ current_members:
     website:
 
   - name: Edie Salzig
-    role: Engineering Assistant II
+    role: Engineering Assistant III
     image:
     blurb:
     email: eden.salzig@whoi.edu
@@ -34,6 +34,7 @@ previous_members:
 
   - name: Julie Jakoboski
     role: MIT-WHOI Joint Program Student
+    now: MetOcean Solutions, New Zealand
     email:
     website:
 
@@ -44,6 +45,7 @@ previous_members:
 
   - name: Kyle R. Kausch
     role: MIT-WHOI Joint Program Student
+    now: LCDR, US Navy
     email:
     website:
 
