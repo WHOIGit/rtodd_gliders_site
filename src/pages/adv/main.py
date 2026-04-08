@@ -288,12 +288,12 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
     available = [c for c in df.columns if c not in exclude_cols]
 
     inst_key = gdl.instruments()[instrument_name]['key']
-    raw_fields = gdl.glider_jsons[gdl.sn_to_filename(glider_sn)][inst_key]['info'].get('fields', {})
-    field_meta = {c: raw_fields.get(c, {}) for c in available}
+    info = gdl.glider_jsons[gdl.sn_to_filename(glider_sn)][inst_key]['info']
+    field_meta = {c: info.get(c, {}) for c in available}
 
     def field_label(col):
         meta = field_meta[col]
-        name = meta.get('short_name') or meta.get('units') or ''
+        name = meta.get('name') or meta.get('unit') or ''
         return f"[{col}] {name}" if name else col
 
     field_opts = [{"label": field_label(c), "value": c} for c in available]

@@ -33,7 +33,7 @@ class GliderDataLoader:
             return []
         files = []
         for f in sorted(self.data_dir.iterdir()):
-            if not (f.is_file() and f.name.endswith("_processed.json")):
+            if not (f.is_file() and f.name.endswith("_web.json")):
                 continue
             if self.active_sns is not None:
                 try:
@@ -58,7 +58,7 @@ class GliderDataLoader:
         """Return dict of {sn: file mtime} for all loaded gliders."""
         result = {}
         for filename, glider_json in self.glider_jsons.items():
-            sn = glider_json['sn']
+            sn = int(glider_json['mission'])
             result[sn] = (self.data_dir / filename).stat().st_mtime
         return result
 
@@ -121,7 +121,10 @@ class GliderDataLoader:
 
     def glider_sns(self) -> list[int]:
         """Return serial numbers of all loaded gliders."""
-        return [gj['sn'] for gj in self.glider_jsons.values()]
+        return [int(gj['mission']) for gj in self.glider_jsons.values()]
+
+    INSTRUMENT_KEYS = {'ctd', 'opt', 'dox', 'ph'}
+    INSTRUMENT_NAMES = {'ctd': 'CTD', 'opt': 'OPT', 'dox': 'DOX', 'ph': 'PH'}
 
     def instruments(self) -> Dict[str, dict]:
         """Return instrument metadata: {inst_name: {'key': str, 'gliders': [int]}}."""
@@ -129,15 +132,15 @@ class GliderDataLoader:
             return self._instruments_cache
         insts = {}
         for filename, glider_json in self.glider_jsons.items():
-            sn = glider_json['sn']
-            for inst_key, val in glider_json.items():
-                if isinstance(val, dict) and 'info' in val and 'time' in val:
-                    inst_name = val['info']['tag']
-                    if inst_name not in insts:
-                        insts[inst_name] = dict(gliders=[sn], key=inst_key)
-                    else:
-                        assert insts[inst_name]['key'] == inst_key
-                        insts[inst_name]['gliders'].append(sn)
+            sn = int(glider_json['mission'])
+            for inst_key in self.INSTRUMENT_KEYS:
+                if inst_key not in glider_json:
+                    continue
+                inst_name = self.INSTRUMENT_NAMES[inst_key]
+                if inst_name not in insts:
+                    insts[inst_name] = dict(gliders=[sn], key=inst_key)
+                else:
+                    insts[inst_name]['gliders'].append(sn)
         self._instruments_cache = insts
         return insts
 
@@ -145,30 +148,31 @@ class GliderDataLoader:
         """Return dependent variable fields: {'inst:field': {sn: field_meta}}."""
         fields = {}
         for filename, glider_json in self.glider_jsons.items():
-            sn = glider_json['sn']
-            for key, val in glider_json.items():
-                if isinstance(val, dict) and 'info' in val:
-                    inst_name = val['info']['tag']
-                    for field_tag, field_name in val['info']['tags'].items():
-                        if field_name == 'time': continue
-                        field_meta = val['info']['fields'][field_name]
-                        inst_field_tag = f"{inst_name}:{field_name}"
-                        if inst_field_tag not in fields:
-                            fields[inst_field_tag] = {sn: field_meta}
-                        else:
-                            fields[inst_field_tag][sn] = field_meta
+            sn = int(glider_json['mission'])
+            for inst_key in self.INSTRUMENT_KEYS:
+                if inst_key not in glider_json:
+                    continue
+                inst_name = self.INSTRUMENT_NAMES[inst_key]
+                for field_name, field_meta in glider_json[inst_key]['info'].items():
+                    if field_name in ('time', 'phase'):
+                        continue
+                    inst_field_tag = f"{inst_name}:{field_name}"
+                    if inst_field_tag not in fields:
+                        fields[inst_field_tag] = {sn: field_meta}
+                    else:
+                        fields[inst_field_tag][sn] = field_meta
         return fields
 
     def sn_to_filename(self, glider_sn: int) -> str:
         """Look up filename for a given serial number."""
         for filename, glider_json in self.glider_jsons.items():
-            if glider_sn == glider_json['sn']:
+            if glider_sn == int(glider_json['mission']):
                 return filename
         raise KeyError(f'glider_sn {glider_sn} not found. Available are: {self.glider_sns()}')
 
     def filename_to_sn(self, filename: str) -> int:
         """Look up serial number for a given filename."""
-        return self.glider_jsons[filename]['sn']
+        return int(self.glider_jsons[filename]['mission'])
 
     def _assign_sections(self, df: pd.DataFrame, glider_sn: int) -> pd.DataFrame:
         """Add section column to DataFrame based on ndive ranges from secsactive2."""
@@ -278,8 +282,7 @@ class GliderDataLoader:
         data = data[instrument_key].copy()
         flat_data = dict(time=[])
 
-        for dive_num, times in zip(data['ndive'], data['time']):
-            if dive_num is None: continue
+        for dive_num, times in enumerate(data['time'], start=1):
             ndive_t0 = self.glider_ndive_t0(glider_sn, dive_num)
             if ndive_t0 is None:
                 unixtimes = [None] * len(times)
@@ -291,7 +294,7 @@ class GliderDataLoader:
         segment_lengths = [len(segment) for segment in data['time']]
 
         flat_data['ndive'] = list(chain.from_iterable(
-            [[dive_num] * seg_len for dive_num, seg_len in zip(data["ndive"], segment_lengths)]
+            [[dive_num] * seg_len for dive_num, seg_len in enumerate(segment_lengths, start=1)]
         ))
 
         for key in nested_keys:
