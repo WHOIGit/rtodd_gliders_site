@@ -20,6 +20,13 @@ current_members:
     email: eden.salzig@whoi.edu
     website:
 
+  - name: Sidney Batchelder
+    role: Information Systems Associate III
+    image:
+    blurb: Website Design and Maintenance
+    email: sbatchelder@whoi.edu
+    website: 
+
 previous_members:
   - name: Breck Owens
     role: Emeritus Research Scholar
