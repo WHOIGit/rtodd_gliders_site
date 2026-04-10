@@ -368,6 +368,16 @@ def update_data_plot(inst_store, x_col, y_col, color_col, click_store, selection
         if col == "time":
             df["time_dt"] = pd.to_datetime(df["time"], unit="s", utc=True)
 
+    # Insert NaN separator rows between dives so plotly doesn't connect them
+    if "ndive" in df.columns and df["ndive"].nunique() > 1:
+        sep = pd.DataFrame(index=[0], columns=df.columns)
+        parts = []
+        for i, (_, grp) in enumerate(df.groupby("ndive", sort=False)):
+            if i > 0:
+                parts.append(sep)
+            parts.append(grp)
+        df = pd.concat(parts, ignore_index=True)
+
     x_data = df["time_dt"] if x_col == "time" and "time_dt" in df.columns else df[x_col]
     y_data = df["time_dt"] if y_col == "time" and "time_dt" in df.columns else df[y_col]
 
