@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pandas as pd
+
 import dash
 from dash import Input, Output, State, no_update
 from dash.exceptions import PreventUpdate
@@ -170,12 +172,18 @@ def update_mission_fig(summary_store, dive_num):
 
     rows = summary_store["records"]
     # Extract columns, skipping None datetimes
-    xs        = [r["datetime"] for r in rows if r["datetime"] is not None]
-    psurf_y   = [r["psurf"]    for r in rows if r["datetime"] is not None]
-    pmax_y    = [r["pmax"]     for r in rows if r["datetime"] is not None]
-    pmin_y    = [r["pmin"]     for r in rows if r["datetime"] is not None]
-    divetime_y = [r["divetime"] for r in rows if r["datetime"] is not None]
-    ndives    = [r["ndive"]    for r in rows if r["datetime"] is not None]
+    valid       = [r for r in rows if r["datetime"] is not None]
+    xs          = [r["datetime"] for r in valid]
+    psurf_y     = [r["psurf"]    for r in valid]
+    pmax_y      = [r["pmax"]     for r in valid]
+    pmin_y      = [r["pmin"]     for r in valid]
+    divetime_y  = [r["divetime"] for r in valid]
+    ndives      = [r["ndive"]    for r in valid]
+    dt_strs     = [
+        pd.Timestamp(r["datetime"], unit="s", tz="UTC").strftime("%Y-%m-%d %H:%M UTC")
+        for r in valid
+    ]
+    cdata = list(zip(ndives, dt_strs))
 
     if not xs:
         return _empty_fig("No data")
@@ -192,29 +200,29 @@ def update_mission_fig(summary_store, dive_num):
     fig.add_trace(go.Scatter(
         x=xs, y=psurf_y, name="p surf",
         **common_scatter,
-        customdata=ndives,
-        hovertemplate="Dive %{customdata}<br>p surf: %{y:.2f} db<extra></extra>",
+        customdata=cdata,
+        hovertemplate="%{customdata[1]}<br>Dive %{customdata[0]}<br>p surf: %{y:.2f} db<extra></extra>",
     ), row=1, col=1)
 
     fig.add_trace(go.Scatter(
         x=xs, y=pmin_y, name="p min",
         **common_scatter,
-        customdata=ndives,
-        hovertemplate="Dive %{customdata}<br>p min: %{y:.1f} db<extra></extra>",
+        customdata=cdata,
+        hovertemplate="%{customdata[1]}<br>Dive %{customdata[0]}<br>p min: %{y:.1f} db<extra></extra>",
     ), row=2, col=1)
 
     fig.add_trace(go.Scatter(
         x=xs, y=pmax_y, name="p max",
         **common_scatter,
-        customdata=ndives,
-        hovertemplate="Dive %{customdata}<br>p max: %{y:.1f} db<extra></extra>",
+        customdata=cdata,
+        hovertemplate="%{customdata[1]}<br>Dive %{customdata[0]}<br>p max: %{y:.1f} db<extra></extra>",
     ), row=3, col=1)
 
     fig.add_trace(go.Scatter(
         x=xs, y=divetime_y, name="duration",
         **common_scatter,
-        customdata=ndives,
-        hovertemplate="Dive %{customdata}<br>Duration: %{y:.1f} min<extra></extra>",
+        customdata=cdata,
+        hovertemplate="%{customdata[1]}<br>Dive %{customdata[0]}<br>Duration: %{y:.1f} min<extra></extra>",
     ), row=4, col=1)
 
     # X-axis ticks on shared axis (bottom subplot)
@@ -231,8 +239,11 @@ def update_mission_fig(summary_store, dive_num):
         if matching:
             fig.add_vline(x=matching[0], line_dash="dash", line_color="red", line_width=1.5)
 
+    for ann in fig.layout.annotations:
+        ann.update(x=0, xanchor="left")
+
     fig.update_layout(
-        margin=dict(l=60, r=20, t=30, b=50),
+        margin=dict(l=60, r=20, t=60, b=50),
         showlegend=False,
     )
 
@@ -276,12 +287,33 @@ def update_dive_fig(dive_num, glider_store):
         subplot_titles=("Heading (°)", "Pitch (°)", "Roll (°)", "Pressure (db)"),
     )
 
+    def _fmt_s(s):
+        s = int(round(s))
+        if s < 3600:
+            m, sec = divmod(s, 60)
+            return f"{m}m {sec:02d}s"
+        h, rem = divmod(s, 3600)
+        return f"{h}h {rem // 60:02d}m"
+
+    x_strs = [_fmt_s(v) for v in x]
     scatter_kw = dict(mode="lines", line=dict(width=1.5), showlegend=False)
 
-    fig.add_trace(go.Scatter(x=x, y=head,  name="heading", **scatter_kw), row=1, col=1)
-    fig.add_trace(go.Scatter(x=x, y=pitch, name="pitch",   **scatter_kw), row=2, col=1)
-    fig.add_trace(go.Scatter(x=x, y=roll,  name="roll",    **scatter_kw), row=3, col=1)
-    fig.add_trace(go.Scatter(x=x, y=p,     name="pressure",**scatter_kw), row=4, col=1)
+    fig.add_trace(go.Scatter(x=x, y=head,  name="heading",
+        customdata=x_strs,
+        hovertemplate="%{customdata}<br>Heading: %{y:.1f}°<extra></extra>",
+        **scatter_kw), row=1, col=1)
+    fig.add_trace(go.Scatter(x=x, y=pitch, name="pitch",
+        customdata=x_strs,
+        hovertemplate="%{customdata}<br>Pitch: %{y:.2f}°<extra></extra>",
+        **scatter_kw), row=2, col=1)
+    fig.add_trace(go.Scatter(x=x, y=roll,  name="roll",
+        customdata=x_strs,
+        hovertemplate="%{customdata}<br>Roll: %{y:.2f}°<extra></extra>",
+        **scatter_kw), row=3, col=1)
+    fig.add_trace(go.Scatter(x=x, y=p,     name="pressure",
+        customdata=x_strs,
+        hovertemplate="%{customdata}<br>Pressure: %{y:.1f} db<extra></extra>",
+        **scatter_kw), row=4, col=1)
 
     fig.update_yaxes(range=[0, 360], row=1, col=1)
     fig.update_yaxes(autorange="reversed", row=4, col=1)
@@ -290,6 +322,9 @@ def update_dive_fig(dive_num, glider_store):
     tv, tt = time_ticks(min(x), max(x), fmt="s")
     fig.update_xaxes(tickvals=tv, ticktext=tt, row=4, col=1)
     fig.update_xaxes(title_text="Time in dive", row=4, col=1)
+
+    for ann in fig.layout.annotations:
+        ann.update(x=0, xanchor="left")
 
     fig.update_layout(
         title=dict(text=f"Dive {dive_num}", font=dict(size=14)),
