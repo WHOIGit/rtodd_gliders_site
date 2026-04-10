@@ -206,7 +206,7 @@ def apply_section(section_id, glider_store):
     Input(AdvControlIds.DIVE_INPUT, "value"),
     Input(AdvControlIds.DIVE_INPUT2, "value"),
     Input(AdvControlIds.CAST_FILTER, "value"),
-    State(AdvControlIds.RANGE_TOGGLE, "value"),
+    Input(AdvControlIds.RANGE_TOGGLE, "value"),
     State(AdvStoreIds.GLIDER_DATA_STORE, "data"),
     prevent_initial_call=True,
 )
@@ -221,7 +221,7 @@ def build_selection(dive1, dive2, cast_filter, range_toggle, glider_store):
     if "range" in (range_toggle or []) and n1 is not None and n2 is not None:
         dive_range = [min(n1, n2), max(n1, n2)]
     else:
-        n = n1 if n1 is not None else (n2 if n2 is not None else max_dive)
+        n = n1 if n1 is not None else max_dive
         dive_range = [n, n]
 
     return {
