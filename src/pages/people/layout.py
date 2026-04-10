@@ -45,7 +45,7 @@ def person_card(person: Dict[str, Any], card_bg: str, card_height: int = 170, sh
     now = (person.get("now") or "").strip()
     email = (person.get("email") or "").strip()
     website = (person.get("website") or "").strip()
-    desc = (person.get("description") or "").strip()
+    desc = (person.get("blurb") or "").strip()
     image = _pick_image(person.get("image"))
 
     icon_links = []
