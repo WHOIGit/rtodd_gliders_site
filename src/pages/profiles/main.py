@@ -472,9 +472,9 @@ def update_data_plot(inst_store, x_col, y_col, color_col, click_store, selection
         hovertemplate=(
             f"<b>{x_col}</b>: %{{customdata[1]}}<br>"
             f"<b>{y_col}</b>: %{{customdata[2]}}<br>"
-            f"<b>ndive</b>: %{{customdata[0]}}<br>"
-            f"<b>{color_label}</b>: %{{customdata[3]}}<br>"
-            "<extra></extra>"
+            + ("" if "ndive" in (x_col, y_col) else "<b>ndive</b>: %{customdata[0]}<br>")
+            + ("" if color_label in (x_col, y_col, "ndive") else f"<b>{color_label}</b>: %{{customdata[3]}}<br>")
+            + "<extra></extra>"
         ),
     ))
 
