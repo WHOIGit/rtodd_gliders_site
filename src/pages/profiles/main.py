@@ -8,6 +8,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from data_loader import GliderDataLoader
+from utils import time_ticks
 from .layout import layout
 from .names import AdvStoreIds, AdvControlIds, AdvGraphIds, AdvContainerIds
 
@@ -31,6 +32,34 @@ _map_tile_layer = dict(
         "https://services.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}"
     ],
 )
+
+
+def _fmt_hover(series: pd.Series, col: str) -> pd.Series:
+    """Format a raw data series for hover display based on column type."""
+    if col == "divetime":
+        def fmt(v):
+            if pd.isna(v):
+                return ""
+            s = int(round(v))
+            if s < 60:
+                return f"{s}s"
+            elif s < 3600:
+                m, rem = divmod(s, 60)
+                return f"{m}m {rem:02d}s"
+            elif s < 86400:
+                h, rem = divmod(s, 3600)
+                return f"{h}h {rem // 60:02d}m {rem % 60:02d}s"
+            else:
+                d, rem = divmod(s, 86400)
+                return f"{d}d {rem // 3600:02d}h"
+        return series.apply(fmt)
+    elif col == "datetime":
+        def fmt(v):
+            if pd.isna(v):
+                return ""
+            return pd.Timestamp(v, unit="s", tz="UTC").strftime("%Y-%m-%d %H:%M:%S UTC")
+        return series.apply(fmt)
+    return series
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +97,7 @@ def on_glider_select(glider_sn):
         for name in all_instruments
         if gdl.instrument_in_glider(name, glider_sn)
     ]
-    inst_default = inst_opts[0]["value"] if inst_opts else None
+    inst_default = "CTD" if any(o["value"] == "CTD" for o in inst_opts) else (inst_opts[0]["value"] if inst_opts else None)
 
     # Track records for mini-map
     track_df = gdl.build_glider_df(glider_sn)
@@ -285,6 +314,7 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
 
     # Build axis field options with short_name labels
     exclude_cols = {"ndive", "glider_sn", "instrument", "phase"}
+    non_physical = {"divetime", "datetime", "depth", "p"}
     available = [c for c in df.columns if c not in exclude_cols]
 
     inst_key = gdl.instruments()[instrument_name]['key']
@@ -304,15 +334,14 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
 
     if range_changed and current_x in available:
         x_default = current_x
-    elif is_single_dive:
-        x_default = next((f for f in available if f not in ("time", "depth", "p")), available[0])
     else:
-        x_default = "time" if "time" in available else available[0]
+        x_default = (
+            next((f for f in ("temp",) if f in available), None)
+            or next((f for f in available if f not in non_physical), available[0])
+        )
 
     if range_changed and current_y in available:
         y_default = current_y
-    elif is_single_dive:
-        y_default = "depth" if "depth" in available else "time"
     else:
         y_default = "depth" if "depth" in available else (available[1] if len(available) > 1 else available[0])
 
@@ -363,27 +392,41 @@ def update_data_plot(inst_store, x_col, y_col, color_col, click_store, selection
         )
         return fig
 
-    # Convert time columns to datetime for display
+    # Convert datetime column to pandas Timestamp for display on axes
     for col in (x_col, y_col):
-        if col == "time":
-            df["time_dt"] = pd.to_datetime(df["time"], unit="s", utc=True)
+        if col == "datetime":
+            df["datetime_dt"] = pd.to_datetime(df["datetime"], unit="s", utc=True)
 
     # Insert NaN separator rows between dives so plotly doesn't connect them
     if "ndive" in df.columns and df["ndive"].nunique() > 1:
-        sep = pd.DataFrame(index=[0], columns=df.columns)
+        sep = pd.DataFrame({
+            col: pd.Series([np.nan], dtype=float if pd.api.types.is_integer_dtype(df[col]) else df[col].dtype)
+            for col in df.columns
+        })
         parts = []
         for i, (_, grp) in enumerate(df.groupby("ndive", sort=False)):
             if i > 0:
                 parts.append(sep)
             parts.append(grp)
         df = pd.concat(parts, ignore_index=True)
-
-    x_data = df["time_dt"] if x_col == "time" and "time_dt" in df.columns else df[x_col]
-    y_data = df["time_dt"] if y_col == "time" and "time_dt" in df.columns else df[y_col]
+    x_data = df["datetime_dt"] if x_col == "datetime" and "datetime_dt" in df.columns else df[x_col]
+    y_data = df["datetime_dt"] if y_col == "datetime" and "datetime_dt" in df.columns else df[y_col]
 
     color_field = color_col if (color_col and color_col in df.columns) else "ndive"
     color_data = df[color_field]
     color_label = color_field
+
+    # Build colorbar options with special formatting for ndive, divetime, and datetime.
+    # For datetime, convert to milliseconds so plotly uses its native date tick formatting.
+    colorbar_opts = dict(title=color_label, thickness=14)
+    marker_color_data = pd.to_numeric(color_data, errors="coerce")
+    if color_field == "ndive":
+        colorbar_opts["tickformat"] = ".0f"
+    elif color_field in ("divetime", "datetime"):
+        vals = marker_color_data.dropna()
+        if not vals.empty:
+            tv, tt = time_ticks(vals.min(), vals.max(), fmt=color_field, n_min=3, n_max=6)
+            colorbar_opts.update(tickvals=tv, ticktext=tt)
 
     # Marker symbol: triangle-down for descent (phase==1), triangle-up for ascent
     if "phase" in df.columns:
@@ -391,8 +434,11 @@ def update_data_plot(inst_store, x_col, y_col, color_col, click_store, selection
     else:
         symbols = "circle"
 
-    # Build customdata with ndive + color value per point
-    cdata = np.column_stack([df["ndive"].values, color_data.values])
+    # Build customdata: ndive, formatted x, formatted y, formatted color
+    x_hover = _fmt_hover(df[x_col] if x_col in df.columns else pd.to_numeric(x_data, errors="coerce"), x_col)
+    y_hover = _fmt_hover(df[y_col] if y_col in df.columns else pd.to_numeric(y_data, errors="coerce"), y_col)
+    color_hover = _fmt_hover(color_data, color_field)
+    cdata = np.column_stack([df["ndive"].values, x_hover.values, y_hover.values, color_hover.values])
 
     # Compute selectedpoints if a dive was clicked on the minimap
     sel_points = None
@@ -414,9 +460,9 @@ def update_data_plot(inst_store, x_col, y_col, color_col, click_store, selection
         marker=dict(
             size=5,
             symbol=symbols,
-            color=pd.to_numeric(color_data, errors="coerce"),
+            color=marker_color_data,
             colorscale="Viridis",
-            colorbar=dict(title=color_label, thickness=14),
+            colorbar=colorbar_opts,
             showscale=True,
         ),
         selected=dict(marker=dict(opacity=1)),
@@ -424,15 +470,19 @@ def update_data_plot(inst_store, x_col, y_col, color_col, click_store, selection
         selectedpoints=sel_points,
         customdata=cdata,
         hovertemplate=(
-            f"<b>{x_col}</b>: %{{x}}<br>"
-            f"<b>{y_col}</b>: %{{y}}<br>"
+            f"<b>{x_col}</b>: %{{customdata[1]}}<br>"
+            f"<b>{y_col}</b>: %{{customdata[2]}}<br>"
             f"<b>ndive</b>: %{{customdata[0]}}<br>"
-            f"<b>{color_label}</b>: %{{customdata[1]}}<br>"
+            f"<b>{color_label}</b>: %{{customdata[3]}}<br>"
             "<extra></extra>"
         ),
     ))
 
     def axis_title(col):
+        if col == "divetime":
+            return "divetime (s)"
+        if col == "datetime":
+            return "datetime (UTC)"
         meta = inst_store.get("field_meta", {}).get(col, {})
         short = meta.get('short_name', '')
         units = meta.get('units', '')
@@ -448,6 +498,18 @@ def update_data_plot(inst_store, x_col, y_col, color_col, click_store, selection
         yaxis_title=axis_title(y_col),
         margin=dict(l=60, r=20, t=30, b=50),
     )
+
+    if x_col == "divetime":
+        x_vals = pd.to_numeric(df[x_col], errors="coerce").dropna()
+        if not x_vals.empty:
+            tv, tt = time_ticks(x_vals.min(), x_vals.max(), fmt="s", n_min=4, n_max=8)
+            fig.update_xaxes(tickvals=tv, ticktext=tt)
+
+    if y_col == "divetime":
+        y_vals = pd.to_numeric(df[y_col], errors="coerce").dropna()
+        if not y_vals.empty:
+            tv, tt = time_ticks(y_vals.min(), y_vals.max(), fmt="s", n_min=4, n_max=8)
+            fig.update_yaxes(tickvals=tv, ticktext=tt)
 
     if y_col == "depth":
         fig.update_yaxes(autorange="reversed")

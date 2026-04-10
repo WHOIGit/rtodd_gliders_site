@@ -275,20 +275,20 @@ class GliderDataLoader:
             phase: Optional 'descent' or 'ascent' cast filter.
 
         Returns:
-            DataFrame with columns: time, ndive, depth, phase, [channels], glider_sn, instrument.
+            DataFrame with columns: divetime, datetime, ndive, depth, phase, [channels], glider_sn, instrument.
         """
         data = self.glider_jsons[self.sn_to_filename(glider_sn)]
         instrument_key = self.instruments()[instrument_name]['key']
         data = data[instrument_key].copy()
-        flat_data = dict(time=[])
+        flat_data = dict(divetime=[], datetime=[])
 
         for dive_num, times in enumerate(data['time'], start=1):
+            flat_data['divetime'].extend(times)
             ndive_t0 = self.glider_ndive_t0(glider_sn, dive_num)
             if ndive_t0 is None:
-                unixtimes = [None] * len(times)
+                flat_data['datetime'].extend([None] * len(times))
             else:
-                unixtimes = [t + ndive_t0 if t is not None else None for t in times]
-            flat_data['time'].extend(unixtimes)
+                flat_data['datetime'].extend([t + ndive_t0 if t is not None else None for t in times])
 
         nested_keys = [k for k in data.keys() if k not in ['info', 'ndive', 'time']]
         segment_lengths = [len(segment) for segment in data['time']]
@@ -312,7 +312,7 @@ class GliderDataLoader:
 
         if time_range is not None:
             t_start, t_end = time_range
-            df = df[(df['time'] >= t_start) & (df['time'] <= t_end)]
+            df = df[(df['datetime'] >= t_start) & (df['datetime'] <= t_end)]
 
         if phase is not None and 'phase' in df.columns:
             if phase == 'descent':

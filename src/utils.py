@@ -1,4 +1,5 @@
 import datetime as dt
+import math
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -15,55 +16,119 @@ PORTRAITS_DIR = Path("config/assets/people-imgs").resolve()
 PORTRAITS_URL_PREFIX = "/config-assets/people-img/"
 
 
-def range_slider_marks(t_min, t_max, target_mark_count=10):
-    """
-    Generate RangeSlider marks at evenly spaced full-hour intervals,
-    aligned to the nearest hour, based on a target number of marks.
+# Candidate step sizes (in seconds): plotly's base-60/24/7 sets × unit multipliers
+_NICE_STEPS_S: list[float] = sorted(
+    m * c
+    for m, candidates in [
+        (1,     [1, 2, 5, 10, 15, 30]),   # sub-minute
+        (60,    [1, 2, 5, 10, 15, 30]),   # minutes
+        (3600,  [1, 2, 3, 6, 12]),        # hours
+        (86400, [1, 2, 3, 7, 14, 30]),    # days
+    ]
+    for c in candidates
+)
 
-    Parameters:
+
+def _fmt_duration(seconds: float, step_s: float) -> str:
+    """Format a duration (seconds) as a human-readable string, resolution chosen by step_s."""
+    s = int(round(seconds))
+    if step_s < 60:
+        return f"{s}s"
+    elif step_s < 3600:
+        m, sec = divmod(s, 60)
+        return f"{m}m" if sec == 0 else f"{m}m {sec:02d}s"
+    elif step_s < 86400:
+        h, rem = divmod(s, 3600)
+        m = rem // 60
+        return f"{h}h" if m == 0 else f"{h}h {m:02d}m"
+    else:
+        d, rem = divmod(s, 86400)
+        h = rem // 3600
+        return f"{d}d" if h == 0 else f"{d}d {h:02d}h"
+
+
+def _fmt_datetime_tick(unix_s: float, step_s: float) -> str:
+    """Format a unix timestamp as a human-readable string, resolution chosen by step_s."""
+    ts = pd.Timestamp(unix_s, unit="s", tz="UTC")
+    if step_s < 86400:
+        return ts.strftime("%Y-%m-%d<br>%H:%M")
+    else:
+        return ts.strftime("%Y-%m-%d")
+
+
+def time_ticks(
+    t_min,
+    t_max,
+    fmt: str = "s",
+    n_min: int = 4,
+    n_max: int = 8,
+) -> tuple[list, list]:
+    """Generate human-readable time tick positions and labels.
+
+    Ticks fall on rounded time boundaries (whole minutes, hours, days, etc.)
+    and are formatted to match the scale of the interval.
+
+    Parameters
     ----------
-    df : pandas.DataFrame
-        Must contain 'Datetime' and 'unixTimestamp' columns.
-    target_mark_count : int
-        Approximate number of marks to generate.
+    t_min, t_max : numeric
+        Range of the time axis, in units given by ``fmt``.
+    fmt : str
+        Units of t_min/t_max:
+        - ``"s"``        — seconds (relative duration, e.g. divetime)
+        - ``"ms"``       — milliseconds (relative duration)
+        - ``"min"``      — minutes (relative duration)
+        - ``"datetime"`` — unix timestamp in seconds (absolute time, UTC)
+    n_min, n_max : int
+        Desired range for number of ticks returned.
 
-    Returns:
+    Returns
     -------
-    dict
-        Dictionary of {unixTimestamp: formatted datetime string}
+    tickvals : list
+        Tick positions in the same units as t_min/t_max.
+    ticktext : list[str]
+        Human-readable label for each tick.
     """
-    # Sort and get min/max
+    # Convert to seconds internally
+    if fmt == "ms":
+        scale = 1 / 1000
+    elif fmt == "min":
+        scale = 60.0
+    else:  # "s" or "datetime"
+        scale = 1.0
 
-    if pd.isna(t_min) or pd.isna(t_max) or t_max <= t_min:
-        return {}
-    t_min = dt.datetime.fromtimestamp(t_min)
-    t_max = dt.datetime.fromtimestamp(t_max)
-    # Round t_min up to next full hour
-    t_start = (t_min + pd.Timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+    t_min_s = float(t_min) * scale
+    t_max_s = float(t_max) * scale
+    span_s = t_max_s - t_min_s
 
-    # Total range in seconds
-    total_seconds = (t_max - t_start).total_seconds()
-    if total_seconds <= 0:
-        return {}
+    if span_s <= 0:
+        return [], []
 
-    # Compute spacing interval (rounded to nearest hour step)
-    interval_seconds = total_seconds // target_mark_count
-    interval_hours = max(1, int(round(interval_seconds / 3600)))
+    # Pick the coarsest step that still gives >= n_min ticks; fall back to finest if needed
+    step_s = _NICE_STEPS_S[0]
+    for candidate in _NICE_STEPS_S:
+        n = span_s / candidate
+        if n < n_min:
+            break
+        step_s = candidate
+        if n <= n_max:
+            break
 
-    # Generate evenly spaced timestamps
-    timestamps = pd.date_range(start=t_start, end=t_max, freq=f'{interval_hours}h')
+    # Generate ticks aligned to step boundaries (UTC epoch is already midnight-aligned)
+    first = math.ceil(t_min_s / step_s) * step_s
+    last = math.floor(t_max_s / step_s) * step_s
+    ticks_s = np.arange(first, last + step_s * 0.01, step_s)
 
-    # Convert to Unix timestamp and format labels
-    # marks = {int(ts.timestamp()): ts.strftime('%m/%d %H:%M') for ts in timestamps}
-    marks = {
-        int(ts.timestamp()): {
-            'label': ts.strftime('%m/%d') + '\n' + ts.strftime('%H:%M'),
-            'style': {'fontSize': '12px', 'whiteSpace': 'pre'}
-        }
-        for ts in timestamps
-    }
+    if len(ticks_s) == 0:
+        return [], []
 
-    return marks
+    # Convert back to input units and format labels
+    tickvals = (ticks_s / scale).tolist()
+    if fmt == "datetime":
+        ticktext = [_fmt_datetime_tick(v, step_s) for v in ticks_s]
+    else:
+        ticktext = [_fmt_duration(v, step_s) for v in ticks_s]
+
+    return tickvals, ticktext
 
 
 def asset_url(filename: str, url_prefix: str = "/assets/") -> str:
