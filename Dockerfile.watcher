@@ -1,0 +1,4 @@
+FROM python:3.12-slim
+WORKDIR /app
+COPY src/data_watcher.py src/data_watcher.py
+CMD ["python", "src/data_watcher.py"]

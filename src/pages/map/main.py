@@ -438,6 +438,9 @@ def _ensure_reload_thread():
 
 
 def source_version():
+    manifest = Path("./data/split/manifest.json")
+    if manifest.is_file():
+        return dt.datetime.fromtimestamp(manifest.stat().st_mtime).isoformat(timespec='seconds')
     gdl = GliderDataLoader(data_dir=Path("./data"))
     files = gdl.files_available()
     if not files:

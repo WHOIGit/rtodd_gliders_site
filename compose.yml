@@ -1,4 +1,15 @@
 services:
+  data-watcher:
+    build:
+      context: .
+      dockerfile: Dockerfile.watcher
+    volumes:
+      - ./data:/app/data:ro
+      - ./data/split:/app/data/split
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+
   gliderapp:
     build:
       context: .

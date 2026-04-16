@@ -15,17 +15,25 @@ logger = logging.getLogger(__name__)
 class GliderDataLoader:
     """Loads and manages glider deployment JSON data files."""
 
-    def __init__(self, data_dir: Path, auto_load: bool = False):
+    def __init__(self, data_dir: Path, auto_load: bool = False, split_dir: Optional[Path] = None):
         self.data_dir = data_dir
+        self.split_dir = split_dir if split_dir is not None else data_dir / "split"
         self.glider_jsons: Dict[str, Dict[str, Any]] = dict()
         self.selected_files: list[str] = []
         self.section_ranges: Dict[int, list[tuple[int, float]]] = dict()
         self.active_sns: Optional[set[int]] = None
         self._instruments_cache: Optional[Dict[str, dict]] = None
+        self._use_split: bool = (self.split_dir / "manifest.json").is_file()
+        self._split_manifest: Optional[Dict[str, Any]] = None
+        self._loaded_eng: set[int] = set()
+        self._loaded_instruments: set[tuple] = set()
         self.load_active2()
         self.load_secsactive2()
         if auto_load:
-            self.load_glider_json()
+            if self._use_split:
+                self._load_all_tracks()
+            else:
+                self.load_glider_json()
 
     def files_available(self) -> list[str]:
         """List available JSON data files, filtered by active gliders."""
@@ -56,6 +64,11 @@ class GliderDataLoader:
 
     def sn_mtimes(self) -> Dict[int, float]:
         """Return dict of {sn: file mtime} for all loaded gliders."""
+        if self._use_split and self._split_manifest:
+            result = {}
+            for sn_str, entry in self._split_manifest["gliders"].items():
+                result[int(sn_str)] = entry["source_mtime"]
+            return result
         result = {}
         for filename, glider_json in self.glider_jsons.items():
             sn = int(glider_json['mission'])
@@ -93,6 +106,66 @@ class GliderDataLoader:
             for f in self.selected_files:
                 self.load_glider_json(f, force=force)
         return None
+
+    def _load_all_tracks(self) -> None:
+        """Load track split files for all active gliders into glider_jsons."""
+        manifest_path = self.split_dir / "manifest.json"
+        with manifest_path.open() as f:
+            self._split_manifest = json.load(f)
+        for sn_str, entry in self._split_manifest["gliders"].items():
+            sn = int(sn_str)
+            if self.active_sns is not None and sn not in self.active_sns:
+                continue
+            track_path = self.split_dir / entry["track"]
+            with track_path.open() as f:
+                track_data = json.load(f)
+            filename = f"{sn_str}_web.json"
+            self.glider_jsons[filename] = track_data
+            if filename not in self.selected_files:
+                self.selected_files.append(filename)
+        self._instruments_cache = None
+        logger.info(f"Loaded {len(self.glider_jsons)} track files from split dir")
+
+    def load_eng(self, sn: int) -> None:
+        """Lazy-load eng data for a glider from split files (no-op if not using split)."""
+        if not self._use_split or sn in self._loaded_eng:
+            return
+        if self._split_manifest is None:
+            return
+        sn_str = str(sn)
+        entry = self._split_manifest["gliders"].get(sn_str)
+        if entry is None or "eng" not in entry:
+            return
+        eng_path = self.split_dir / entry["eng"]
+        with eng_path.open() as f:
+            eng_data = json.load(f)
+        filename = f"{sn_str}_web.json"
+        if filename in self.glider_jsons:
+            self.glider_jsons[filename]["eng"] = eng_data
+        self._loaded_eng.add(sn)
+        logger.info(f"Lazy-loaded eng for sn={sn}")
+
+    def load_instrument(self, sn: int, inst_key: str) -> None:
+        """Lazy-load a full instrument block for a glider from split files."""
+        if not self._use_split or (sn, inst_key) in self._loaded_instruments:
+            return
+        if self._split_manifest is None:
+            return
+        sn_str = str(sn)
+        entry = self._split_manifest["gliders"].get(sn_str)
+        if entry is None:
+            return
+        inst_files = entry.get("instruments", {})
+        if inst_key not in inst_files:
+            return
+        inst_path = self.split_dir / inst_files[inst_key]
+        with inst_path.open() as f:
+            inst_data = json.load(f)
+        filename = f"{sn_str}_web.json"
+        if filename in self.glider_jsons:
+            self.glider_jsons[filename][inst_key] = inst_data
+        self._loaded_instruments.add((sn, inst_key))
+        logger.info(f"Lazy-loaded {inst_key} for sn={sn}")
 
     def load_active2(self) -> None:
         """Load active2.csv to determine which gliders are active."""
@@ -277,8 +350,9 @@ class GliderDataLoader:
         Returns:
             DataFrame with columns: divetime, datetime, ndive, depth, phase, [channels], glider_sn, instrument.
         """
-        data = self.glider_jsons[self.sn_to_filename(glider_sn)]
         instrument_key = self.instruments()[instrument_name]['key']
+        self.load_instrument(glider_sn, instrument_key)
+        data = self.glider_jsons[self.sn_to_filename(glider_sn)]
         data = data[instrument_key].copy()
         flat_data = dict(divetime=[], datetime=[])
 

@@ -119,6 +119,7 @@ def on_glider_select(glider_sn):
         raise PreventUpdate
 
     glider_sn = int(glider_sn)
+    _get_gdl().load_eng(glider_sn)
     filename = _get_gdl().sn_to_filename(glider_sn)
     data = _get_gdl().glider_jsons[filename]
     eng = data["eng"]
@@ -285,10 +286,11 @@ def update_dive_fig(dive_num, glider_store):
         raise PreventUpdate
 
     glider_sn = int(glider_store["sn"])
+    _get_gdl().load_eng(glider_sn)
     filename = _get_gdl().sn_to_filename(glider_sn)
     data = _get_gdl().glider_jsons[filename]
     eng = data["eng"]
-    tl_time = data["time"]  # <-- add this
+    tl_time = data["time"]
 
     dive_idx = int(dive_num) - 1
     if dive_idx < 0 or dive_idx >= len(eng["time"]):
