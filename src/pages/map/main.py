@@ -391,9 +391,17 @@ _reload_lock = threading.Lock()
 
 
 def _background_reload(interval: int):
-    """Daemon thread: reload _mapdata_cache when data files change."""
+    """Daemon thread: reload _mapdata_cache when data files change.
+
+    Checks immediately on start (no initial sleep) so that stale pre-warmed
+    caches are refreshed within seconds of the thread launching.
+    """
+    first = True
     while True:
-        time.sleep(interval)
+        if first:
+            first = False
+        else:
+            time.sleep(interval)
         try:
             version = source_version()
             if _mapdata_cache["version"] == version:
@@ -438,15 +446,16 @@ def source_version():
     return dt.datetime.fromtimestamp(latest).isoformat(timespec='seconds')
 
 
-def load_mapdata(version: str) -> dict:
-    """Return mapdata from the module-level cache, recomputing only when version changes."""
+def load_mapdata() -> dict:
+    """Return mapdata from cache. Never blocks — background thread handles reloads.
+
+    On cold start (no cache yet), does a synchronous load so the pre-warm in
+    app.py has something to serve. After that, always returns whatever is cached.
+    """
     if _mapdata_cache["data"] is not None:
-        if _mapdata_cache["version"] != version:
-            logger.info(f"Data version changed ({_mapdata_cache['version']} → {version}); serving current cache.")
         return _mapdata_cache["data"]
+    # Cold start only — subsequent reloads happen in _background_reload
     data = load_mapdata_from_source()
-    # Read version after loading so the stored version reflects file state at completion,
-    # not at the start of a potentially long load (avoids mtime race on next check).
     _mapdata_cache["version"] = source_version()
     _mapdata_cache["data"] = data
     return data
@@ -490,15 +499,14 @@ def default_timerange_seconds(days_back=7):
 )
 def init_mapdata_on_session(pathname, init_state):
     _ensure_reload_thread()
-    version = source_version()
+    mapdata = load_mapdata()
+    cache_version = _mapdata_cache["version"]
 
-    # Already initialized → do nothing
-    if init_state['initialized'] and version == init_state['version']:
+    # Already initialized with current cache → do nothing
+    if init_state['initialized'] and init_state.get('version') == cache_version:
         raise PreventUpdate
 
-    mapdata = load_mapdata(version)
-
-    return mapdata, dict(initialized=True, version=version)
+    return mapdata, dict(initialized=True, version=cache_version)
 
 
 @app.callback(
@@ -509,11 +517,11 @@ def init_mapdata_on_session(pathname, init_state):
     prevent_initial_call=True,
 )
 def refresh_mapdata_on_interval(n_intervals, init_state):
-    version = source_version()
-    if init_state.get("version") == version:
+    cache_version = _mapdata_cache.get("version")
+    if not cache_version or init_state.get("version") == cache_version:
         raise PreventUpdate
-    logger.info(f"Interval refresh: pushing new data version {version} to client.")
-    return load_mapdata(version), dict(initialized=True, version=version)
+    logger.info(f"Interval refresh: pushing new data version {cache_version} to client.")
+    return _mapdata_cache["data"], dict(initialized=True, version=cache_version)
 
 
 @app.callback(

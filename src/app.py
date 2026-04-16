@@ -49,9 +49,8 @@ server = app.server
 # Pre-warm the map data cache at startup so the first visitor doesn't trigger
 # a 20-second blocking load in the single Gunicorn worker.
 from pages.map.main import load_mapdata, source_version as _map_source_version
-initial_data_version = _map_source_version()
-load_mapdata(initial_data_version)
-logging.info(f'Data Preload Timestamp: {initial_data_version}')
+load_mapdata()
+logging.info(f'Data Preload Timestamp: {_map_source_version()}')
 
 # Optional: only allow typical image extensions
 ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
