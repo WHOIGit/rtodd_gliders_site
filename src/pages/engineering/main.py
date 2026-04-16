@@ -328,8 +328,11 @@ def update_dive_fig(dive_num, glider_store):
         hovertemplate="%{customdata}<br>Pressure: %{y:.1f} db<extra></extra>",
         **scatter_kw), row=4, col=1)
 
-    fig.update_yaxes(range=[0, 360], row=1, col=1)
-    fig.update_yaxes(autorange="reversed", row=4, col=1)
+    # --- Y-axis defaults ---
+    fig.update_yaxes(range=[0, 360], row=1, col=1)  # Heading
+    fig.update_yaxes(range=[-25, 25], row=2, col=1)  # Pitch
+    fig.update_yaxes(range=[-45, 45], row=3, col=1)  # Roll
+    fig.update_yaxes(autorange="reversed", row=4, col=1)  # Pressure
 
     # X-axis ticks on bottom subplot (shared)
     tv, tt = time_ticks(min(x), max(x), fmt="s")
