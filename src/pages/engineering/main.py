@@ -241,6 +241,14 @@ def update_mission_fig(summary_store, dive_num):
     # X-axis ticks on shared axis (bottom subplot)
     tv, tt = time_ticks(min(xs), max(xs), fmt="datetime")
     fig.update_xaxes(tickvals=tv, ticktext=tt, row=4, col=1)
+    fig.update_traces(xaxis="x4", hoverinfo="skip")
+    fig.update_layout(xaxis=dict(showspikes=True))
+    fig.update_xaxes(
+        showspikes=True,
+        spikemode="across",   # line spans all subplots
+        spikesnap="cursor",
+        showline=True,
+    )
 
     fig.update_yaxes(autorange="reversed", row=1, col=1)
     fig.update_yaxes(autorange="reversed", row=2, col=1)
@@ -338,6 +346,14 @@ def update_dive_fig(dive_num, glider_store):
     tv, tt = time_ticks(min(x), max(x), fmt="s")
     fig.update_xaxes(tickvals=tv, ticktext=tt, row=4, col=1)
     fig.update_xaxes(title_text="Time in dive", row=4, col=1)
+    fig.update_traces(xaxis="x4", hoverinfo="skip")
+    fig.update_layout(xaxis=dict(showspikes=True))
+    fig.update_xaxes(
+        showspikes=True,
+        spikemode="across",   # line spans all subplots
+        spikesnap="cursor",
+        showline=True,
+    )
 
     for ann in fig.layout.annotations:
         ann.update(x=0, xanchor="left")
