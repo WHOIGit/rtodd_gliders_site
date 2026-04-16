@@ -286,7 +286,9 @@ def update_dive_fig(dive_num, glider_store):
 
     glider_sn = int(glider_store["sn"])
     filename = _get_gdl().sn_to_filename(glider_sn)
-    eng = _get_gdl().glider_jsons[filename]["eng"]
+    data = _get_gdl().glider_jsons[filename]
+    eng = data["eng"]
+    tl_time = data["time"]  # <-- add this
 
     dive_idx = int(dive_num) - 1
     if dive_idx < 0 or dive_idx >= len(eng["time"]):
@@ -295,6 +297,10 @@ def update_dive_fig(dive_num, glider_store):
     x = eng["time"][dive_idx]
     if not x:
         return _empty_fig(f"No data for dive {dive_num}")
+
+    t0 = None
+    if dive_idx < len(tl_time) and tl_time[dive_idx]:
+        t0 = tl_time[dive_idx][0]  # unix timestamp (seconds)
 
     p     = eng["p"][dive_idx]
     head  = eng["head"][dive_idx]
@@ -317,23 +323,31 @@ def update_dive_fig(dive_num, glider_store):
         return f"{h}h {rem // 60:02d}m"
 
     x_strs = [_fmt_s(v) for v in x]
+    dt_strs = [""] * len(x)
+    if t0 is not None:
+        dt_strs = [
+            pd.Timestamp(t0 + v, unit="s", tz="UTC").strftime("%Y-%m-%d %H:%M:%S UTC")
+            for v in x
+        ]
+    customdata = list(zip(x_strs, dt_strs))
+
     scatter_kw = dict(mode="lines", line=dict(width=1.5), showlegend=False)
 
     fig.add_trace(go.Scatter(x=x, y=head,  name="heading",
-        customdata=x_strs,
-        hovertemplate="%{customdata}<br>Heading: %{y:.1f}°<extra></extra>",
+        customdata=customdata,
+        hovertemplate="%{customdata[1]}<br>Dive Time: %{customdata[0]}<br>Heading: %{y:.1f}°<extra></extra>",
         **scatter_kw), row=1, col=1)
     fig.add_trace(go.Scatter(x=x, y=pitch, name="pitch",
-        customdata=x_strs,
-        hovertemplate="%{customdata}<br>Pitch: %{y:.2f}°<extra></extra>",
+        customdata=customdata,
+        hovertemplate="%{customdata[1]}<br>Dive Time: %{customdata[0]}<br>Heading: %{y:.1f}°<extra></extra>",
         **scatter_kw), row=2, col=1)
     fig.add_trace(go.Scatter(x=x, y=roll,  name="roll",
-        customdata=x_strs,
-        hovertemplate="%{customdata}<br>Roll: %{y:.2f}°<extra></extra>",
+        customdata=customdata,
+        hovertemplate="%{customdata[1]}<br>Dive Time: %{customdata[0]}<br>Heading: %{y:.1f}°<extra></extra>",
         **scatter_kw), row=3, col=1)
     fig.add_trace(go.Scatter(x=x, y=p,     name="pressure",
-        customdata=x_strs,
-        hovertemplate="%{customdata}<br>Pressure: %{y:.1f} db<extra></extra>",
+        customdata=customdata,
+        hovertemplate="%{customdata[1]}<br>Dive Time: %{customdata[0]}<br>Heading: %{y:.1f}°<extra></extra>",
         **scatter_kw), row=4, col=1)
 
     # --- Y-axis defaults ---
