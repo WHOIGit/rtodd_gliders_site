@@ -255,11 +255,20 @@ def update_mission_fig(summary_store, dive_num):
     fig.update_yaxes(autorange="reversed", row=2, col=1)
     fig.update_yaxes(autorange="reversed", row=3, col=1)
 
-    # Vertical line for selected dive
+    # Vertical line for selected dive (one shape per subplot row to span all)
     if dive_num is not None:
         matching = [r["datetime"] for r in rows if r["ndive"] == int(dive_num) and r["datetime"] is not None]
         if matching:
-            fig.add_vline(x=matching[0], line_dash="dash", line_color="red", line_width=1.5)
+            for row in range(1, 5):
+                yref = "y" if row == 1 else f"y{row}"
+                fig.add_shape(
+                    type="line",
+                    x0=matching[0], x1=matching[0],
+                    y0=0, y1=1,
+                    xref="x4",
+                    yref=f"{yref} domain",
+                    line=dict(dash="dash", color="red", width=1.5),
+                )
 
     for ann in fig.layout.annotations:
         ann.update(x=0, xanchor="left")
@@ -341,15 +350,15 @@ def update_dive_fig(dive_num, glider_store):
         **scatter_kw), row=1, col=1)
     fig.add_trace(go.Scatter(x=x, y=pitch, name="pitch",
         customdata=customdata,
-        hovertemplate="%{customdata[1]}<br>Dive Time: %{customdata[0]}<br>Heading: %{y:.1f}°<extra></extra>",
+        hovertemplate="%{customdata[1]}<br>Dive Time: %{customdata[0]}<br>Pitch: %{y:.1f}°<extra></extra>",
         **scatter_kw), row=2, col=1)
     fig.add_trace(go.Scatter(x=x, y=roll,  name="roll",
         customdata=customdata,
-        hovertemplate="%{customdata[1]}<br>Dive Time: %{customdata[0]}<br>Heading: %{y:.1f}°<extra></extra>",
+        hovertemplate="%{customdata[1]}<br>Dive Time: %{customdata[0]}<br>Roll: %{y:.1f}°<extra></extra>",
         **scatter_kw), row=3, col=1)
     fig.add_trace(go.Scatter(x=x, y=p,     name="pressure",
         customdata=customdata,
-        hovertemplate="%{customdata[1]}<br>Dive Time: %{customdata[0]}<br>Heading: %{y:.1f}°<extra></extra>",
+        hovertemplate="%{customdata[1]}<br>Dive Time: %{customdata[0]}<br>Pressure: %{y:.1f}°<extra></extra>",
         **scatter_kw), row=4, col=1)
 
     # --- Y-axis defaults ---
