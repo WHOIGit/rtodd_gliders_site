@@ -172,7 +172,31 @@ def step_dive(n_prev, n_next, current, glider_store):
 
 
 # ---------------------------------------------------------------------------
-# CB-4: Mission figure — pressures and dive duration over full mission
+# CB-4: Mission figure click → selected dive
+# ---------------------------------------------------------------------------
+@app.callback(
+    Output(EngControlIds.DIVE_INPUT, "value", allow_duplicate=True),
+    Input(EngGraphIds.MISSION_FIG, "clickData"),
+    prevent_initial_call=True,
+)
+def select_dive_from_mission_click(click_data):
+    if not click_data or not click_data.get("points"):
+        raise PreventUpdate
+
+    pt = click_data["points"][0]
+    customdata = pt.get("customdata")
+    if not customdata:
+        raise PreventUpdate
+
+    dive_num = customdata[0]
+    if dive_num is None:
+        raise PreventUpdate
+
+    return int(dive_num)
+
+
+# ---------------------------------------------------------------------------
+# CB-5: Mission figure — pressures and dive duration over full mission
 # ---------------------------------------------------------------------------
 @app.callback(
     Output(EngGraphIds.MISSION_FIG, "figure"),
@@ -243,7 +267,7 @@ def update_mission_fig(summary_store, dive_num):
     tv, tt = time_ticks(min(xs), max(xs), fmt="datetime")
     fig.update_xaxes(tickvals=tv, ticktext=tt, row=4, col=1)
     fig.update_traces(xaxis="x4", hoverinfo="skip")
-    fig.update_layout(xaxis=dict(showspikes=True))
+    fig.update_layout(xaxis=dict(showspikes=True), clickmode="event")
     fig.update_xaxes(
         showspikes=True,
         spikemode="across",   # line spans all subplots
@@ -282,7 +306,7 @@ def update_mission_fig(summary_store, dive_num):
 
 
 # ---------------------------------------------------------------------------
-# CB-5: Dive figure — heading, pitch, roll, pressure for selected dive
+# CB-6: Dive figure — heading, pitch, roll, pressure for selected dive
 # ---------------------------------------------------------------------------
 @app.callback(
     Output(EngGraphIds.DIVE_FIG, "figure"),
