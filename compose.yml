@@ -1,8 +1,10 @@
 services:
   data-watcher:
+    image: gliderapp:latest
     build:
       context: .
-      dockerfile: Dockerfile.watcher
+      dockerfile: Dockerfile
+    command: ["python", "src/data_watcher.py"]
     volumes:
       - ./data:/app/data:ro
       - ./data/split:/app/data/split
@@ -11,9 +13,7 @@ services:
       - PYTHONUNBUFFERED=1
 
   gliderapp:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: gliderapp:latest
     container_name: gliderapp
     ports:
       - "8050:8050"
@@ -22,7 +22,6 @@ services:
       - PYTHONUNBUFFERED=1
       - PROD=1
       - DEBUG=0
-
     volumes:
       - ./data:/app/data:ro
       - ./config:/app/config:ro

@@ -6,3 +6,4 @@ PyYAML~=6.0.3
 beautifulsoup4~=4.14.3
 dash-extensions~=1.0.20
 dash-leaflet~=1.0.15
+ijson~=3.5.0
