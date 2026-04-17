@@ -81,6 +81,10 @@ def _date_to_epoch_end(date_str):
     d = d + dt.timedelta(days=1) - dt.timedelta(seconds=1)
     return int(d.timestamp())
 
+def _truncate_to_day_start(epoch: int) -> int:
+    d = dt.datetime.fromtimestamp(epoch, tz=dt.timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    return int(d.timestamp())
+
 @app.callback(
     Output(StoreIds.TIMERANGE_STORE, "data"),
     Output(StoreIds.TIMEBTN_ACTIVE_STORE, "data"),
@@ -98,23 +102,27 @@ def update_timerange_store(
     start_date, end_date,
 ):
     trig = dash.ctx.triggered_id
-    now = end = int(time.time())
+    now = int(time.time())
     start = 0
 
     if trig == ControlIds.TIME_BTN_DAY:
-        start = now - 1 * 24 * 3600
+        start = _truncate_to_day_start(now - 1 * 24 * 3600)
+        return [start, None], trig
 
     elif trig == ControlIds.TIME_BTN_WEEK:
-        start = now - 7 * 24 * 3600
+        start = _truncate_to_day_start(now - 7 * 24 * 3600)
+        return [start, None], trig
 
     elif trig == ControlIds.TIME_BTN_MONTH:
-        start = now - 30 * 24 * 3600
+        start = _truncate_to_day_start(now - 30 * 24 * 3600)
+        return [start, None], trig
 
     elif trig == ControlIds.TIME_BTN_X:
         if not start_date:
             return no_update, ControlIds.TIME_BTN_X
         start = _date_to_epoch_start(start_date)
         end = _date_to_epoch_end(end_date) if end_date else now
+        return [start, end], trig
 
     elif trig == ControlIds.TIME_RANGE_PICKER:
         if not start_date:
@@ -125,8 +133,6 @@ def update_timerange_store(
 
     else: # trig == ControlIds.TIME_BTN_ALL
         return None, trig
-
-    return [start, end], trig
 
 
 
@@ -206,7 +212,10 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region
         # filter by time range if available
         if time_range and "time" in df.columns:
             start, end = time_range
-            df = df[(df["time"] >= start) & (df["time"] <= end)]
+            mask = df["time"] >= start
+            if end is not None:
+                mask = mask & (df["time"] <= end)
+            df = df[mask]
 
         if df.empty:
             continue
@@ -254,7 +263,10 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region
 
             if time_range and "time" in df_uv.columns:
                 start, end = time_range
-                df_uv = df_uv[(df_uv["time"] >= start) & (df_uv["time"] <= end)]
+                mask = df_uv["time"] >= start
+                if end is not None:
+                    mask = mask & (df_uv["time"] <= end)
+                df_uv = df_uv[mask]
 
             uv_lines = []
             for section, df_uv_sec in df_uv.groupby("section", sort=False):
@@ -404,6 +416,7 @@ def load_mapdata_from_source():
     return {
         "latlon_records": latlon_records,
         "uv_records": uv_records,
+        "data_mtime": gdl.latest_filemodified_timestamp(),
     }
 
 
@@ -425,10 +438,14 @@ def init_mapdata_on_session(pathname):
 @app.callback(
     Output(StoreIds.MAPDATA_STORE, "data", allow_duplicate=True),
     Input(IntervalIds.DATA_REFRESH, "n_intervals"),
+    State(StoreIds.MAPDATA_STORE, "data"),
     prevent_initial_call=True,
 )
-def refresh_mapdata_on_interval(n_intervals):
-    return load_mapdata_from_source()
+def refresh_mapdata_on_interval(n_intervals, current_store):
+    new_data = load_mapdata_from_source()
+    if current_store and current_store.get("data_mtime") == new_data.get("data_mtime"):
+        return no_update
+    return new_data
 
 
 @app.callback(

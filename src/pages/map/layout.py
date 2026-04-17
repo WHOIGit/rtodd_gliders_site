@@ -203,9 +203,10 @@ def float_box():
 
 
 def main_layout():
-    now = int(time.time())
+    import datetime as dt
     daysago = 30
-    start = now - daysago * 24 * 60 * 60
+    today = dt.datetime.now(tz=dt.timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    start = int((today - dt.timedelta(days=daysago)).timestamp())
 
     loading_overlay = html.Div(
         [
@@ -255,7 +256,7 @@ def main_layout():
 
             # memory stores: cleared on every page load so hard refresh always fetches fresh data
             dcc.Store(id=StoreIds.MAPDATA_STORE, storage_type="memory", data={}),
-            dcc.Store(id=StoreIds.TIMERANGE_STORE, storage_type="memory", data=[start, now]),
+            dcc.Store(id=StoreIds.TIMERANGE_STORE, storage_type="memory", data=[start, None]),
             dcc.Store(id=StoreIds.TIMEBTN_ACTIVE_STORE, storage_type="memory", data=ControlIds.TIME_BTN_MONTH),
 
             # periodic check for updated data files
