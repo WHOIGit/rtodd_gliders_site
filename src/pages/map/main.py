@@ -217,7 +217,16 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region
     legend_items = []
     maxlat, minlat, maxlon, minlon = -180, 180, -180, 180
 
-    for glider_sn, records in latlon_records.items():
+    sorted_gliders = sorted(
+        latlon_records.items(),
+        key=lambda item: max(
+            (r['time'] for r in item[1] if r.get('time') is not None and not np.isnan(r['time'])),
+            default=0,
+        ),
+        reverse=True,
+    )
+
+    for glider_sn, records in sorted_gliders:
         color_rgb = next(COLOR_CYCLE)
         color_hex = rgb_to_hex(*color_rgb)
 
@@ -307,7 +316,7 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region
                     )
 
             if uv_lines:
-                children.append(dl.LayerGroup(children=uv_lines))
+                children.append(dl.LayerGroup(children=uv_lines, id=f"uv-{glider_sn}"))
 
         # endpoint marker with custom icon
         end_row = df.iloc[-1]
