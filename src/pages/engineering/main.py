@@ -86,7 +86,7 @@ def populate_glider_options(_):
     gdl = _get_gdl()
     sns = sorted(gdl.glider_sns())
     opts = [{"label": f"Spray {sn:03d}", "value": sn} for sn in sns]
-    mtimes = gdl.sn_mtimes()
+    mtimes = {sn: t for sn, t in gdl.sn_mtimes().items() if sn in sns}
     most_recent = max(mtimes, key=mtimes.get) if mtimes else (sns[0] if sns else None)
     return opts, most_recent
 
