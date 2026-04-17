@@ -126,14 +126,26 @@ class GliderDataLoader:
         self._instruments_cache = None
         logger.info(f"Loaded {len(self.glider_jsons)} track files from split dir")
 
+    def _manifest_key(self, sn: int) -> str | None:
+        """Return the manifest gliders key whose numeric value equals sn."""
+        if self._split_manifest is None:
+            return None
+        for key in self._split_manifest.get("gliders", {}):
+            try:
+                if int(key) == sn:
+                    return key
+            except ValueError:
+                pass
+        return None
+
     def load_eng(self, sn: int) -> None:
         """Lazy-load eng data for a glider from split files (no-op if not using split)."""
         if not self._use_split or sn in self._loaded_eng:
             return
         if self._split_manifest is None:
             return
-        sn_str = str(sn)
-        entry = self._split_manifest["gliders"].get(sn_str)
+        sn_str = self._manifest_key(sn)
+        entry = self._split_manifest["gliders"].get(sn_str) if sn_str else None
         if entry is None or "eng" not in entry:
             return
         eng_path = self.split_dir / entry["eng"]
@@ -151,8 +163,8 @@ class GliderDataLoader:
             return
         if self._split_manifest is None:
             return
-        sn_str = str(sn)
-        entry = self._split_manifest["gliders"].get(sn_str)
+        sn_str = self._manifest_key(sn)
+        entry = self._split_manifest["gliders"].get(sn_str) if sn_str else None
         if entry is None:
             return
         inst_files = entry.get("instruments", {})

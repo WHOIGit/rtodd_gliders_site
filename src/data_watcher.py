@@ -3,9 +3,11 @@ import gc
 import json
 import logging
 import os
-import time
 import tempfile
+import time
+from decimal import Decimal
 from pathlib import Path
+import datetime as dt
 
 import ijson
 
@@ -23,8 +25,6 @@ POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "300"))
 TRACK_KEYS = {"mission", "glider_version", "time", "lat", "lon", "u", "v"}
 INSTRUMENT_KEYS = {"ctd", "opt", "dox", "ph"}
 
-
-from decimal import Decimal
 
 def _json_default(obj):
     if isinstance(obj, Decimal):
@@ -47,11 +47,50 @@ def atomic_write(path: Path, obj: dict) -> None:
         raise
 
 
-def split_glider_streaming(web_json_path: Path, split_dir: Path, glider_id: str) -> dict:
-    """Split a _web.json into track + eng + per-instrument files using streaming parse.
+def manifest_entry_complete(entry: dict) -> bool:
+    track = entry.get("track")
+    if not track or not (SPLIT_DIR / track).exists():
+        return False
 
-    Returns a manifest entry dict for this glider.
-    """
+    eng = entry.get("eng")
+    if eng and not (SPLIT_DIR / eng).exists():
+        return False
+
+    for fname in entry.get("instruments", {}).values():
+        if not (SPLIT_DIR / fname).exists():
+            return False
+
+    return True
+
+
+def load_known_mtimes_from_manifest() -> dict:
+    manifest_path = SPLIT_DIR / "manifest.json"
+    if not manifest_path.exists():
+        return {}
+
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except Exception as e:
+        logger.warning(f"Failed to read existing manifest: {e}")
+        return {}
+
+    known_mtimes = {}
+    for glider_id, entry in manifest.get("gliders", {}).items():
+        source_mtime = entry.get("source_mtime")
+        if source_mtime is None:
+            continue
+        if not manifest_entry_complete(entry):
+            logger.info(f"Manifest entry for {glider_id} incomplete; will re-split")
+            continue
+        source_file = entry.get("source_file", f"{glider_id}_web.json")
+        known_mtimes[source_file] = source_mtime
+
+    logger.info(f"Loaded {len(known_mtimes)} source mtimes from manifest")
+    return known_mtimes
+
+
+def split_glider_streaming(web_json_path: Path, split_dir: Path, glider_id: str) -> dict:
+    """Split a _web.json into track + eng + per-instrument files using streaming parse."""
     logger.info(f"Splitting {web_json_path.name}")
     source_mtime = web_json_path.stat().st_mtime
 
@@ -67,7 +106,6 @@ def split_glider_streaming(web_json_path: Path, split_dir: Path, glider_id: str)
             elif key == "eng":
                 eng_filename = f"{glider_id}_eng.json"
                 atomic_write(split_dir / eng_filename, value)
-                del value
 
             elif key in INSTRUMENT_KEYS:
                 inst_filename = f"{glider_id}_{key}.json"
@@ -77,14 +115,13 @@ def split_glider_streaming(web_json_path: Path, split_dir: Path, glider_id: str)
                 if isinstance(value, dict) and "info" in value:
                     track[key] = {"info": value["info"]}
 
-                del value
-
     track_filename = f"{glider_id}_track.json"
     atomic_write(split_dir / track_filename, track)
 
     entry = {
         "track": track_filename,
         "source_mtime": source_mtime,
+        "source_file": web_json_path.name,
         "instruments": instrument_files,
     }
     if eng_filename:
@@ -98,25 +135,18 @@ def split_glider_streaming(web_json_path: Path, split_dir: Path, glider_id: str)
 
 
 def build_manifest(gliders: dict) -> dict:
-    import datetime as dt
     return {
-        "version": dt.datetime.utcnow().isoformat(timespec="seconds"),
+        "version": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
         "gliders": gliders,
     }
 
 
 def scan_and_split(known_mtimes: dict) -> dict:
-    """Check all _web.json files; split those that are new or changed.
-
-    known_mtimes: {filename: mtime} from last scan
-    Returns updated known_mtimes dict.
-    """
     web_files = sorted(DATA_DIR.glob("*_web.json"))
     if not web_files:
         logger.warning(f"No *_web.json files found in {DATA_DIR}")
         return known_mtimes
 
-    # Load existing manifest if present so we can preserve unchanged entries
     manifest_path = SPLIT_DIR / "manifest.json"
     existing_gliders: dict = {}
     if manifest_path.exists():
@@ -128,21 +158,25 @@ def scan_and_split(known_mtimes: dict) -> dict:
     gliders = dict(existing_gliders)
     updated = False
 
+    current_ids = {web_path.name[:-9] for web_path in web_files}
+    for glider_id in list(gliders):
+        if glider_id not in current_ids:
+            logger.info(f"Removing missing source from manifest: {glider_id}")
+            gliders.pop(glider_id, None)
+            updated = True
+
     for web_path in web_files:
-        try:
-            sn = str(int(web_path.name.split("_")[0]))
-        except ValueError:
-            continue
+        glider_id = web_path.name[:-9]  # strip "_web.json"
 
         current_mtime = web_path.stat().st_mtime
         prev_mtime = known_mtimes.get(web_path.name)
 
         if prev_mtime is not None and abs(current_mtime - prev_mtime) < 0.01:
-            continue  # unchanged
+            continue
 
         try:
-            entry = split_glider_streaming(web_path, SPLIT_DIR, sn)
-            gliders[sn] = entry
+            entry = split_glider_streaming(web_path, SPLIT_DIR, glider_id)
+            gliders[glider_id] = entry
             known_mtimes[web_path.name] = current_mtime
             updated = True
         except Exception as e:
@@ -173,14 +207,12 @@ def main():
     )
     SPLIT_DIR.mkdir(parents=True, exist_ok=True)
 
-    known_mtimes: dict = {}
+    known_mtimes = load_known_mtimes_from_manifest()
 
-    # Initial scan
     known_mtimes = scan_and_split(known_mtimes)
     gc.collect()
     _trim_heap()
 
-    # Poll loop
     while True:
         time.sleep(POLL_INTERVAL)
         logger.info("Polling for changes...")

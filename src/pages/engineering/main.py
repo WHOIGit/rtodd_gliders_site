@@ -119,10 +119,13 @@ def on_glider_select(glider_sn):
         raise PreventUpdate
 
     glider_sn = int(glider_sn)
-    _get_gdl().load_eng(glider_sn)
-    filename = _get_gdl().sn_to_filename(glider_sn)
-    data = _get_gdl().glider_jsons[filename]
-    eng = data["eng"]
+    gdl = _get_gdl()
+    gdl.load_eng(glider_sn)
+    filename = gdl.sn_to_filename(glider_sn)
+    data = gdl.glider_jsons[filename]
+    eng = data.get("eng")
+    if eng is None:
+        raise PreventUpdate
     tl_time = data["time"]
 
     rows = []
