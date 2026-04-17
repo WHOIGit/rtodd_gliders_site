@@ -345,9 +345,18 @@ def _viewport_for_preset(region_key):
     Input(StoreIds.TIMERANGE_STORE, "data"),
     Input(ControlIds.UV_SCALE, "value"),
     Input(ControlIds.REGION_SELECT, "value"),
+    State(IntervalIds.DATA_REFRESH, "n_intervals"),
     prevent_initial_call=False,
 )
-def update_map(store_data, time_range, uv_scale, region_key):
+def update_map(store_data, time_range, uv_scale, region_key, n_intervals):
+    is_interval_refresh = (
+        dash.ctx.triggered_id == ControlIds.UV_SCALE
+        or (
+            dash.ctx.triggered_id == StoreIds.MAPDATA_STORE
+            and n_intervals is not None
+            and n_intervals > 0
+        )
+    )
     store_data = store_data or {}
     latlon_records = store_data.get("latlon_records", {})
     uv_records = store_data.get("uv_records", {})
@@ -389,7 +398,8 @@ def update_map(store_data, time_range, uv_scale, region_key):
     all_children = [tile, zoom_ctrl] + data_children
 
     if region_key == 'auto':
-        return all_children, _viewport_for_bounds(bounds), False, ""
+        vp = no_update if is_interval_refresh else _viewport_for_bounds(bounds)
+        return all_children, vp, False, ""
     else:
         return all_children, _viewport_for_preset(region_key), False, ""
 
