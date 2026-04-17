@@ -6,6 +6,7 @@ class StoreIds:
     MAPDATA_STORE = "map-store"
     TIMERANGE_STORE = "time-range-store"
     TIMEBTN_ACTIVE_STORE = "time-btn-active-store"
+    REGION_ACTIVE_STORE = "region-active-store"
 
 class ControlIds:
     TIME_BTN_DAY = "time-btn-day"

@@ -91,15 +91,20 @@ def options_div():
         className="mt-3",
     )
 
-    region_select = dbc.RadioItems(
-        id=ControlIds.REGION_SELECT,
-        options=_region_options,
-        value=_default_region,
-        inline=False,
-        className="btn-group-vertical w-100",
-        inputClassName="btn-check",
-        labelClassName="btn btn-outline-secondary btn-sm",
-        labelCheckedClassName="btn btn-secondary btn-sm",
+    region_select = html.Div(
+        [
+            dbc.Button(
+                opt["label"],
+                id={"type": "region-btn", "index": opt["value"]},
+                size="sm",
+                color="secondary",
+                outline=opt["value"] != _default_region,
+                className="w-100 mb-1",
+                n_clicks=0,
+            )
+            for opt in _region_options
+        ],
+        id="region-btn-group",
     )
 
     return html.Div(
@@ -258,6 +263,7 @@ def main_layout():
             dcc.Store(id=StoreIds.MAPDATA_STORE, storage_type="memory", data={}),
             dcc.Store(id=StoreIds.TIMERANGE_STORE, storage_type="memory", data=[start, None]),
             dcc.Store(id=StoreIds.TIMEBTN_ACTIVE_STORE, storage_type="memory", data=ControlIds.TIME_BTN_MONTH),
+            dcc.Store(id=StoreIds.REGION_ACTIVE_STORE, storage_type="memory", data={"region": _default_region, "n": 0}),
 
             # periodic check for updated data files
             dcc.Interval(id=IntervalIds.DATA_REFRESH, interval=5 * 60 * 1000, n_intervals=0),

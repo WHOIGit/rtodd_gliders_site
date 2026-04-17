@@ -157,6 +157,27 @@ def set_active_time_button(active_btn_id):
     )
 
 
+@app.callback(
+    Output(StoreIds.REGION_ACTIVE_STORE, "data"),
+    Input({"type": "region-btn", "index": ALL}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def update_region_store(all_n_clicks):
+    trig = dash.ctx.triggered_id
+    if not trig or not any(c for c in all_n_clicks if c):
+        return no_update
+    return {"region": trig["index"], "n": sum(c or 0 for c in all_n_clicks)}
+
+
+@app.callback(
+    Output({"type": "region-btn", "index": ALL}, "outline"),
+    Input(StoreIds.REGION_ACTIVE_STORE, "data"),
+)
+def set_active_region_button(region_data):
+    active = (region_data or {}).get("region", _default_region)
+    return [opt["value"] != active for opt in _region_options]
+
+
 def rgb_to_hex(r:int, g:int, b:int, a=None):
     if a is None:
         return "#{:02X}{:02X}{:02X}".format(
@@ -166,7 +187,7 @@ def rgb_to_hex(r:int, g:int, b:int, a=None):
             int(r), int(g), int(b), int(a * 255))
 
 
-_, _, REGION_PRESETS, _GLIDER_IMAGE_URL = load_map_region_config(Path("config/map_config.yml").resolve())
+_default_region, _region_options, REGION_PRESETS, _GLIDER_IMAGE_URL = load_map_region_config(Path("config/map_config.yml").resolve())
 
 GLIDER_ICON = dict(
     iconUrl=_GLIDER_IMAGE_URL or "SprayGliderTail.png",
@@ -344,11 +365,12 @@ def _viewport_for_preset(region_key):
     Input(StoreIds.MAPDATA_STORE, "data"),
     Input(StoreIds.TIMERANGE_STORE, "data"),
     Input(ControlIds.UV_SCALE, "value"),
-    Input(ControlIds.REGION_SELECT, "value"),
+    Input(StoreIds.REGION_ACTIVE_STORE, "data"),
     State(IntervalIds.DATA_REFRESH, "n_intervals"),
     prevent_initial_call=False,
 )
-def update_map(store_data, time_range, uv_scale, region_key, n_intervals):
+def update_map(store_data, time_range, uv_scale, region_store, n_intervals):
+    region_key = (region_store or {}).get("region", _default_region)
     is_interval_refresh = (
         dash.ctx.triggered_id == ControlIds.UV_SCALE
         or (
