@@ -183,7 +183,7 @@ def _plot_area():
 
 def make_layout():
     stores = html.Div([
-        dcc.Store(id=AdvStoreIds.GLIDER_DATA_STORE, storage_type="session"),
+        dcc.Store(id=AdvStoreIds.GLIDER_DATA_STORE, storage_type="memory"),
         dcc.Store(id=AdvStoreIds.INSTRUMENT_DF_STORE, storage_type="memory"),
         dcc.Store(id=AdvStoreIds.SELECTION_STORE, storage_type="memory"),
         dcc.Store(id=AdvStoreIds.MINIMAP_CLICK_STORE, storage_type="memory"),

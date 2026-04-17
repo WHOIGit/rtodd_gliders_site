@@ -6,7 +6,7 @@ from .names import EngStoreIds, EngControlIds, EngGraphIds
 
 def make_layout():
     stores = html.Div([
-        dcc.Store(id=EngStoreIds.GLIDER_DATA_STORE, storage_type="session"),
+        dcc.Store(id=EngStoreIds.GLIDER_DATA_STORE, storage_type="memory"),
         dcc.Store(id=EngStoreIds.ENG_SUMMARY_STORE, storage_type="memory"),
     ])
 

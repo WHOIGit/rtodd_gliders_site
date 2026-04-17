@@ -4,7 +4,6 @@ class MapIds:
 
 class StoreIds:
     MAPDATA_STORE = "map-store"
-    MAPDATA_STORE_STATE = "mapdata-store-state"
     TIMERANGE_STORE = "time-range-store"
     TIMEBTN_ACTIVE_STORE = "time-btn-active-store"
 

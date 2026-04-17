@@ -21,20 +21,8 @@ dash.register_page(
 
 app = dash.get_app()
 
-# Module-level data loader — reloaded by _get_gdl() when data files change.
-_gdl: GliderDataLoader | None = None
-_gdl_version: str | None = None
-
-
 def _get_gdl() -> GliderDataLoader:
-    """Return the GliderDataLoader, reloading if data files have changed."""
-    global _gdl, _gdl_version
-    from pages.map.main import source_version
-    v = source_version()
-    if _gdl is None or v != _gdl_version:
-        _gdl = GliderDataLoader(data_dir=Path("./data"), auto_load=True)
-        _gdl_version = v
-    return _gdl
+    return GliderDataLoader(data_dir=Path("./data"), auto_load=True)
 
 # ArcGIS ocean basemap config (same as map page)
 _map_tile_layer = dict(
@@ -97,22 +85,23 @@ def on_glider_select(glider_sn):
         raise PreventUpdate
 
     glider_sn = int(glider_sn)
+    gdl = _get_gdl()
 
     # Section options
-    sections = _get_gdl().sections_for_glider(glider_sn)
+    sections = gdl.sections_for_glider(glider_sn)
     section_opts = [{"label": s["label"], "value": s["id"]} for s in sections]
 
     # Instrument options
-    all_instruments = _get_gdl().instruments()
+    all_instruments = gdl.instruments()
     inst_opts = [
         {"label": name, "value": name}
         for name in all_instruments
-        if _get_gdl().instrument_in_glider(name, glider_sn)
+        if gdl.instrument_in_glider(name, glider_sn)
     ]
     inst_default = "CTD" if any(o["value"] == "CTD" for o in inst_opts) else (inst_opts[0]["value"] if inst_opts else None)
 
     # Track records for mini-map
-    track_df = _get_gdl().build_glider_df(glider_sn)
+    track_df = gdl.build_glider_df(glider_sn)
     max_dive = int(track_df["ndive"].max()) if not track_df.empty else 1
 
     # JSON can't represent float('inf') — replace inf ends with max_dive before storing
@@ -329,8 +318,9 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
     non_physical = {"divetime", "datetime", "depth", "p"}
     available = [c for c in df.columns if c not in exclude_cols]
 
-    inst_key = _get_gdl().instruments()[instrument_name]['key']
-    info = _get_gdl().glider_jsons[_get_gdl().sn_to_filename(glider_sn)][inst_key]['info']
+    gdl = _get_gdl()
+    inst_key = gdl.instruments()[instrument_name]['key']
+    info = gdl.glider_jsons[gdl.sn_to_filename(glider_sn)][inst_key]['info']
     field_meta = {c: info.get(c, {}) for c in available}
 
     def field_label(col):
@@ -668,8 +658,9 @@ def toggle_minimap(value):
     Input(AdvControlIds.GLIDER_SELECT, "id"),  # fires once on page load
 )
 def populate_glider_options(_):
-    sns = sorted(_get_gdl().glider_sns())
+    gdl = _get_gdl()
+    sns = sorted(gdl.glider_sns())
     opts = [{"label": f"Spray {sn:03d}", "value": sn} for sn in sns]
-    mtimes = _get_gdl().sn_mtimes()
+    mtimes = gdl.sn_mtimes()
     most_recent = max(mtimes, key=mtimes.get) if mtimes else (sns[0] if sns else None)
     return opts, most_recent

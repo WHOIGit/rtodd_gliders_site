@@ -53,20 +53,8 @@ dash.register_page(
 
 app = dash.get_app()
 
-# Module-level data loader — reloaded by _get_gdl() when data files change.
-_gdl: GliderDataLoader | None = None
-_gdl_version: str | None = None
-
-
 def _get_gdl() -> GliderDataLoader:
-    """Return the GliderDataLoader, reloading if data files have changed."""
-    global _gdl, _gdl_version
-    from pages.map.main import source_version
-    v = source_version()
-    if _gdl is None or v != _gdl_version:
-        _gdl = GliderDataLoader(data_dir=Path("./data"), auto_load=True)
-        _gdl_version = v
-    return _gdl
+    return GliderDataLoader(data_dir=Path("./data"), auto_load=True)
 
 
 def _empty_fig(msg="No data"):
@@ -95,9 +83,10 @@ def _empty_fig(msg="No data"):
     Input(EngControlIds.GLIDER_SELECT, "id"),
 )
 def populate_glider_options(_):
-    sns = sorted(_get_gdl().glider_sns())
+    gdl = _get_gdl()
+    sns = sorted(gdl.glider_sns())
     opts = [{"label": f"Spray {sn:03d}", "value": sn} for sn in sns]
-    mtimes = _get_gdl().sn_mtimes()
+    mtimes = gdl.sn_mtimes()
     most_recent = max(mtimes, key=mtimes.get) if mtimes else (sns[0] if sns else None)
     return opts, most_recent
 
@@ -322,9 +311,10 @@ def update_dive_fig(dive_num, glider_store):
         raise PreventUpdate
 
     glider_sn = int(glider_store["sn"])
-    _get_gdl().load_eng(glider_sn)
-    filename = _get_gdl().sn_to_filename(glider_sn)
-    data = _get_gdl().glider_jsons[filename]
+    gdl = _get_gdl()
+    gdl.load_eng(glider_sn)
+    filename = gdl.sn_to_filename(glider_sn)
+    data = gdl.glider_jsons[filename]
     eng = data["eng"]
     tl_time = data["time"]
 

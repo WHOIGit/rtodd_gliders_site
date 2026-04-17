@@ -253,12 +253,10 @@ def main_layout():
             # triggers on navigation/page-load
             dcc.Location(id="url", refresh=False),
 
-            # session stores so init runs once per tab session
-            dcc.Store(id=StoreIds.MAPDATA_STORE, storage_type="session", data={}),
-            dcc.Store(id=StoreIds.MAPDATA_STORE_STATE, storage_type="session",
-                      data={"initialized": False, 'version':''}),
-            dcc.Store(id=StoreIds.TIMERANGE_STORE, storage_type="session", data=[start, now]),
-            dcc.Store(id=StoreIds.TIMEBTN_ACTIVE_STORE, storage_type="session", data=ControlIds.TIME_BTN_MONTH),
+            # memory stores: cleared on every page load so hard refresh always fetches fresh data
+            dcc.Store(id=StoreIds.MAPDATA_STORE, storage_type="memory", data={}),
+            dcc.Store(id=StoreIds.TIMERANGE_STORE, storage_type="memory", data=[start, now]),
+            dcc.Store(id=StoreIds.TIMEBTN_ACTIVE_STORE, storage_type="memory", data=ControlIds.TIME_BTN_MONTH),
 
             # periodic check for updated data files
             dcc.Interval(id=IntervalIds.DATA_REFRESH, interval=5 * 60 * 1000, n_intervals=0),
