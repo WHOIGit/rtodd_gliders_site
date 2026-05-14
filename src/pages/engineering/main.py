@@ -170,6 +170,14 @@ def on_glider_select(glider_sn):
             return None
         return seq[i]
 
+    # eng["divetime"] encoding is inconsistent across glider type / source
+    # (sometimes seconds, sometimes minutes, sometimes a spurious timestamp).
+    # tl_time[i] = [start, end] unix seconds is reliable everywhere — use it.
+    def _duration_min(t_pair):
+        if not t_pair or len(t_pair) < 2 or t_pair[0] is None or t_pair[1] is None:
+            return None
+        return (t_pair[1] - t_pair[0]) / 60.0
+
     rows = []
     for i, ndive in enumerate(eng["ndive"]):
         if ndive is None:
@@ -185,7 +193,7 @@ def on_glider_select(glider_sn):
             "psurf":    _get("psurf", i),
             "pmax":     _get("pmax", i),
             "pmin":     min(p_series) if p_series else None,
-            "divetime": _get("divetime", i),
+            "divetime": _duration_min(t_pair),
         })
 
     max_dive = max(r["ndive"] for r in rows) if rows else 1
