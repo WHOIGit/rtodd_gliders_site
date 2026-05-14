@@ -25,8 +25,28 @@ def _controls_card():
         dbc.CardBody([
             html.H5("Advanced Data Explorer", className="mb-3"),
 
-            # Glider selection
-            html.Label("Glider", className="fw-semibold mb-1"),
+            # Glider selection (label flips to "Mission" in archived mode)
+            dbc.Row([
+                dbc.Col(
+                    html.Label(
+                        id=AdvControlIds.GLIDER_LABEL,
+                        children="Glider",
+                        className="fw-semibold mb-0",
+                    ),
+                    width="auto",
+                ),
+                dbc.Col(
+                    dbc.Checklist(
+                        id=AdvControlIds.ARCHIVED_TOGGLE,
+                        options=[{"label": "Archived", "value": "on"}],
+                        value=[],
+                        switch=True,
+                        inline=True,
+                        className="mb-0",
+                    ),
+                    className="d-flex align-items-center justify-content-end",
+                ),
+            ], className="mb-1 align-items-center"),
             dcc.Dropdown(
                 id=AdvControlIds.GLIDER_SELECT,
                 options=[],

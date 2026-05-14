@@ -1,13 +1,13 @@
 from pathlib import Path
 
 import dash
-from dash import Input, Output, State, no_update
+from dash import Input, Output, State, no_update, html
 from dash.exceptions import PreventUpdate
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
-from data_loader import GliderDataLoader
+from data_loader import GliderDataLoader, parse_mission_yyyymmm
 from utils import time_ticks
 from .layout import layout
 from .names import AdvStoreIds, AdvControlIds, AdvGraphIds, AdvContainerIds
@@ -84,8 +84,11 @@ def on_glider_select(glider_sn):
     if not glider_sn:
         raise PreventUpdate
 
-    glider_sn = int(glider_sn)
+    glider_sn = str(glider_sn)
     gdl = _get_gdl()
+    # Archived mission ids are longer than 4 chars; lazy-load if needed.
+    if len(glider_sn) > 4 or glider_sn in gdl.archive_missions:
+        gdl.load_archived(glider_sn)
 
     # Section options
     sections = gdl.sections_for_glider(glider_sn)
@@ -252,7 +255,7 @@ def update_cast_options(instrument_name, selection, glider_sn):
 
     ndive_range = tuple(selection["dive_range"]) if selection.get("dive_range") else None
     try:
-        df = _get_gdl().build_instrument_df(int(glider_sn), instrument_name, ndive_range=ndive_range)
+        df = _get_gdl().build_instrument_df(str(glider_sn), instrument_name, ndive_range=ndive_range)
     except (KeyError, ValueError):
         return _all_opts
 
@@ -291,7 +294,7 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
     if not instrument_name or not selection or not glider_sn:
         raise PreventUpdate
 
-    glider_sn = int(glider_sn)
+    glider_sn = str(glider_sn)
     cast = selection.get("cast", "all")
     phase_filter = None
     if cast == "downcast":
@@ -650,17 +653,58 @@ def toggle_minimap(value):
 
 
 # ---------------------------------------------------------------------------
-# Populate glider dropdown options on page load
+# Populate glider/mission dropdown based on Archived toggle
 # ---------------------------------------------------------------------------
+_GRAY = {"color": "#999", "marginLeft": "0.5em"}
+_DISABLED_PRIMARY = {"color": "#aaa"}
+
+
+def _option_label(primary: str, suffix: str, disabled: bool = False):
+    primary_node = html.Span(primary, style=_DISABLED_PRIMARY) if disabled else primary
+    if not suffix:
+        return html.Span([primary_node]) if disabled else primary
+    return html.Span([primary_node, html.Span(suffix, style=_GRAY)])
+
+
 @app.callback(
     Output(AdvControlIds.GLIDER_SELECT, "options"),
     Output(AdvControlIds.GLIDER_SELECT, "value"),
-    Input(AdvControlIds.GLIDER_SELECT, "id"),  # fires once on page load
+    Output(AdvControlIds.GLIDER_SELECT, "placeholder"),
+    Output(AdvControlIds.GLIDER_LABEL, "children"),
+    Input(AdvControlIds.ARCHIVED_TOGGLE, "value"),
 )
-def populate_glider_options(_):
+def populate_glider_options(archived_value):
     gdl = _get_gdl()
-    sns = sorted(gdl.glider_sns())
-    opts = [{"label": f"Spray {sn:03d}", "value": sn} for sn in sns]
-    mtimes = {sn: t for sn, t in gdl.sn_mtimes().items() if sn in sns}
-    most_recent = max(mtimes, key=mtimes.get) if mtimes else (sns[0] if sns else None)
-    return opts, most_recent
+    archived = "on" in (archived_value or [])
+
+    if archived:
+        ids = gdl.archive_mission_ids()
+        opts = []
+        for mid in ids:
+            meta = gdl.archive_missions.get(mid, {})
+            region = meta.get("region", "")
+            yymm = parse_mission_yyyymmm(mid)
+            suffix = f" {region} - {yymm}" if region else f" {yymm}"
+            disabled = not gdl.has_json(mid)
+            opts.append({
+                "label": _option_label(mid, suffix, disabled=disabled),
+                "value": mid,
+                "disabled": disabled,
+            })
+        return opts, None, "Select mission...", "Mission"
+
+    sns = gdl.all_active_sns()
+    opts = []
+    for sn in sns:
+        region = gdl.active_meta.get(sn, {}).get("region", "")
+        suffix = f" {region}" if region else ""
+        disabled = not gdl.has_json(sn)
+        opts.append({
+            "label": _option_label(f"Spray {sn}", suffix, disabled=disabled),
+            "value": sn,
+            "disabled": disabled,
+        })
+    loaded_sns = [sn for sn in sns if gdl.has_json(sn)]
+    mtimes = {sn: t for sn, t in gdl.sn_mtimes().items() if sn in loaded_sns}
+    most_recent = max(mtimes, key=mtimes.get) if mtimes else (loaded_sns[0] if loaded_sns else None)
+    return opts, most_recent, "Select glider...", "Glider"

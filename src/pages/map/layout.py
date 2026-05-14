@@ -8,9 +8,13 @@ import dash_leaflet as dl
 
 from .names import *
 from utils import load_map_region_config
+from data_loader import GliderDataLoader
 
+_gdl = GliderDataLoader(data_dir=Path("./data"), auto_load=False)
+_active_regions = {m["region"] for m in _gdl.active_meta.values()}
 _default_region, _region_options, _region_presets, _ = load_map_region_config(
-    Path("config/map_config.yml").resolve()
+    Path("config/map_config.yml").resolve(),
+    active_regions=_active_regions,
 )
 
 # Initial center/zoom from the default region preset

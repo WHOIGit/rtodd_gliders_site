@@ -143,9 +143,19 @@ def asset_url(filename: str, url_prefix: str = "/assets/") -> str:
     return app_prefix.rstrip("/") + url_prefix + filename
 
 
-def load_map_region_config(config_path):
+def load_map_region_config(config_path, active_regions=None):
     """
     Load map config from a YAML file (map_config.yml).
+
+    Each region has an `enable` field:
+      - true: include
+      - false: skip
+      - "if-has-gliders": include only if region_key is in active_regions
+        (not honored for auto/global — those are always included)
+
+    Args:
+        config_path: path to map_config.yml
+        active_regions: optional set of region keys with at least one active glider
 
     Returns:
         default_region (str): key of the default selected region
@@ -158,7 +168,6 @@ def load_map_region_config(config_path):
     with open(config_path) as f:
         cfg = yaml.safe_load(f)
 
-    # Resolve glider_image: check src/assets/ first, then config/assets/
     glider_image_url = None
     glider_image = cfg.get("glider_image")
     if glider_image:
@@ -168,13 +177,36 @@ def load_map_region_config(config_path):
         elif (assets_dir / glider_image).exists():
             glider_image_url = asset_url(glider_image, "/assets/")
 
+    active_regions = set(active_regions or [])
     default_region = None
     region_options = []
     region_presets = {}
 
     for key, val in cfg.get("regions", {}).items():
-        if not val.get("enabled", True):
+        enable = val.get("enable", True)
+        if key in ("auto", "global"):
+            if enable != True:
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"region {key!r} has enable={enable!r}; forcing enabled"
+                )
+            include = True
+        elif enable is True:
+            include = True
+        elif enable is False:
+            include = False
+        elif enable == "if-has-gliders":
+            include = key in active_regions
+        else:
+            import logging
+            logging.getLogger(__name__).warning(
+                f"region {key!r} has unrecognized enable={enable!r}; treating as false"
+            )
+            include = False
+
+        if not include:
             continue
+
         if val.get("default", False):
             default_region = key
         region_options.append({"label": val["label"], "value": key})

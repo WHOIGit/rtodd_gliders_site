@@ -187,7 +187,16 @@ def rgb_to_hex(r:int, g:int, b:int, a=None):
             int(r), int(g), int(b), int(a * 255))
 
 
-_default_region, _region_options, REGION_PRESETS, _GLIDER_IMAGE_URL = load_map_region_config(Path("config/map_config.yml").resolve())
+def _load_region_config():
+    gdl = GliderDataLoader(data_dir=Path("./data"), auto_load=False)
+    active_regions = {m["region"] for m in gdl.active_meta.values()}
+    return load_map_region_config(
+        Path("config/map_config.yml").resolve(),
+        active_regions=active_regions,
+    )
+
+
+_default_region, _region_options, REGION_PRESETS, _GLIDER_IMAGE_URL = _load_region_config()
 
 GLIDER_ICON = dict(
     iconUrl=_GLIDER_IMAGE_URL or "SprayGliderTail.png",
@@ -441,8 +450,8 @@ def load_mapdata_from_source():
     gdl = GliderDataLoader(data_dir=Path("./data"), auto_load=True)
     latlon_records, uv_records = {}, {}
     for sn in gdl.glider_sns():
-        latlon_records[sn] = gdl.build_glider_df(glider_sn=sn).to_dict('records')
-        uv_sn_df = gdl.build_uv_df(glider_sn=sn)
+        latlon_records[sn] = gdl.build_glider_df(sn).to_dict('records')
+        uv_sn_df = gdl.build_uv_df(sn)
         new_lats, new_lons = latlon_offset(
             uv_sn_df["lat"].values,
             uv_sn_df["lon"].values,
@@ -518,8 +527,18 @@ def toggle_custom_time_picker(
 def set_glider_options(store_data):
     store_data = store_data or {}
     latlon_records = store_data.get("latlon_records", {})
-    sns = sorted(latlon_records.keys())
-    return [{"label": f"Spray {sn}", "value": str(sn)} for sn in sns]
+    loaded = set(latlon_records.keys())
+    gdl = GliderDataLoader(data_dir=Path("./data"), auto_load=False)
+    all_sns = sorted(set(gdl.all_active_sns()) | loaded)
+    opts = []
+    for sn in all_sns:
+        disabled = sn not in loaded
+        opts.append({
+            "label": f"Spray {sn}" + (" (no data)" if disabled else ""),
+            "value": sn,
+            "disabled": disabled,
+        })
+    return opts
 
 
 @app.callback(

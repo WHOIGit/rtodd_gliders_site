@@ -84,10 +84,18 @@ def _empty_fig(msg="No data"):
 )
 def populate_glider_options(_):
     gdl = _get_gdl()
-    sns = sorted(gdl.glider_sns())
-    opts = [{"label": f"Spray {sn:03d}", "value": sn} for sn in sns]
-    mtimes = {sn: t for sn, t in gdl.sn_mtimes().items() if sn in sns}
-    most_recent = max(mtimes, key=mtimes.get) if mtimes else (sns[0] if sns else None)
+    sns = gdl.all_active_sns()
+    opts = []
+    for sn in sns:
+        disabled = not gdl.has_json(sn)
+        opts.append({
+            "label": f"Spray {sn}" + (" (no data)" if disabled else ""),
+            "value": sn,
+            "disabled": disabled,
+        })
+    loaded_sns = [sn for sn in sns if gdl.has_json(sn)]
+    mtimes = {sn: t for sn, t in gdl.sn_mtimes().items() if sn in loaded_sns}
+    most_recent = max(mtimes, key=mtimes.get) if mtimes else (loaded_sns[0] if loaded_sns else None)
     return opts, most_recent
 
 
@@ -107,7 +115,7 @@ def on_glider_select(glider_sn):
     if not glider_sn:
         raise PreventUpdate
 
-    glider_sn = int(glider_sn)
+    glider_sn = str(glider_sn)
     gdl = _get_gdl()
     gdl.load_eng(glider_sn)
     filename = gdl.sn_to_filename(glider_sn)
@@ -310,7 +318,7 @@ def update_dive_fig(dive_num, glider_store):
     if dive_num is None or not glider_store:
         raise PreventUpdate
 
-    glider_sn = int(glider_store["sn"])
+    glider_sn = str(glider_store["sn"])
     gdl = _get_gdl()
     gdl.load_eng(glider_sn)
     filename = gdl.sn_to_filename(glider_sn)

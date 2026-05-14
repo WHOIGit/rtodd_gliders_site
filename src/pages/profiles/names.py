@@ -6,6 +6,8 @@ class AdvStoreIds:
 
 class AdvControlIds:
     GLIDER_SELECT = "adv-glider-select"
+    GLIDER_LABEL = "adv-glider-label"
+    ARCHIVED_TOGGLE = "adv-archived-toggle"
     SECTION_SELECT = "adv-section-select"
     RANGE_TOGGLE = "adv-range-toggle"
     DIVE_INPUT = "adv-dive-input"
