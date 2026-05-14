@@ -272,6 +272,7 @@ def main_layout():
             dcc.Store(id=StoreIds.TIMEBTN_ACTIVE_STORE, storage_type="memory", data=ControlIds.TIME_BTN_MONTH),
             dcc.Store(id=StoreIds.REGION_ACTIVE_STORE, storage_type="memory", data={"region": _default_region, "n": 0}),
             dcc.Store(id=StoreIds.LEGEND_BOUNDS_STORE, storage_type="memory", data={}),
+            dcc.Store(id=StoreIds.LEGEND_HIDDEN_STORE, storage_type="memory", data=[]),
 
             # periodic check for updated data files
             dcc.Interval(id=IntervalIds.DATA_REFRESH, interval=5 * 60 * 1000, n_intervals=0),

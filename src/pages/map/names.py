@@ -8,6 +8,7 @@ class StoreIds:
     TIMEBTN_ACTIVE_STORE = "time-btn-active-store"
     REGION_ACTIVE_STORE = "region-active-store"
     LEGEND_BOUNDS_STORE = "legend-bounds-store"
+    LEGEND_HIDDEN_STORE = "legend-hidden-store"
 
 class ControlIds:
     TIME_BTN_DAY = "time-btn-day"

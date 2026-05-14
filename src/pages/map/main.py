@@ -229,7 +229,7 @@ GLIDER_ICON = dict(
 )
 
 
-def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region_key):
+def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region_key, hidden=None):
     """Build dash-leaflet children, bounds, and legend for the map.
 
     Returns (children, bounds, legend_items, per_glider_bounds) where:
@@ -247,8 +247,9 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region
         (140,  86,  75), # brown
     ])
 
+    hidden_set = set(hidden or [])
     children = []
-    legend_items = []
+    legend_items = []  # all gliders, with a `hidden` flag
     per_glider_bounds = {}
     maxlat, minlat, maxlon, minlon = -180, 180, -180, 180
 
@@ -285,16 +286,20 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region
         if df.empty:
             continue
 
-        legend_items.append((glider_sn, color_hex))
+        is_hidden = str(glider_sn) in hidden_set
+        legend_items.append((glider_sn, color_hex, is_hidden))
 
-        # per-glider bounds (for legend click-to-zoom)
+        # per-glider bounds (for legend click-to-zoom) — computed even when hidden
         g_minlat = float(df["lat"].min())
         g_maxlat = float(df["lat"].max())
         g_minlon = float(df["lon"].min())
         g_maxlon = float(df["lon"].max())
         per_glider_bounds[glider_sn] = [[g_minlat, g_minlon], [g_maxlat, g_maxlon]]
 
-        # set overall map bounds
+        if is_hidden:
+            continue
+
+        # set overall map bounds (visible gliders only)
         minlat = min(minlat, g_minlat)
         maxlat = max(maxlat, g_maxlat)
         minlon = min(minlon, g_minlon)
@@ -327,8 +332,8 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region
                 )
             )
 
-        # add u,v vectors if available
-        if uv_records and glider_sn in uv_records:
+        # add u,v vectors if available (skip entirely when scale is off)
+        if uv_scale and uv_records and glider_sn in uv_records:
             uv_recs = uv_records[glider_sn]
             df_uv = pd.DataFrame(uv_recs)
             df_uv = df_uv.dropna(subset=["lat", "lon", "u", "v"])
@@ -387,7 +392,9 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region
         )
 
     if not children:
-        return [], None, [], {}
+        # No visible tracks — still surface the legend so users can re-show.
+        bounds_or_none = None
+        return [], bounds_or_none, legend_items, per_glider_bounds
 
     bounds = [[minlat, minlon], [maxlat, maxlon]]
     return children, bounds, legend_items, per_glider_bounds
@@ -419,13 +426,16 @@ def _viewport_for_preset(region_key):
     Input(StoreIds.TIMERANGE_STORE, "data"),
     Input(ControlIds.UV_SCALE, "value"),
     Input(StoreIds.REGION_ACTIVE_STORE, "data"),
+    Input(StoreIds.LEGEND_HIDDEN_STORE, "data"),
     State(IntervalIds.DATA_REFRESH, "n_intervals"),
     prevent_initial_call=False,
 )
-def update_map(store_data, time_range, uv_scale, region_store, n_intervals):
+def update_map(store_data, time_range, uv_scale, region_store, hidden, n_intervals):
     region_key = (region_store or {}).get("region", _default_region)
+    is_visibility_toggle = dash.ctx.triggered_id == StoreIds.LEGEND_HIDDEN_STORE
     is_interval_refresh = (
         dash.ctx.triggered_id == ControlIds.UV_SCALE
+        or is_visibility_toggle
         or (
             dash.ctx.triggered_id == StoreIds.MAPDATA_STORE
             and n_intervals is not None
@@ -444,12 +454,15 @@ def update_map(store_data, time_range, uv_scale, region_store, n_intervals):
         return [tile, zoom_ctrl], vp, False, "", [], {}
 
     data_children, bounds, legend_items, gbounds = _build_map_children(
-        latlon_records, uv_records, time_range, uv_scale, region_key
+        latlon_records, uv_records, time_range, uv_scale, region_key, hidden=hidden
     )
 
     if not data_children:
-        # No data for this time range — try shifting to last available data
-        if time_range:
+        # No visible tracks. Could be: (a) everything hidden via legend toggle,
+        # (b) no data in the selected time range. For (b), try shifting.
+        all_hidden_via_toggle = bool(legend_items) and all(h for *_, h in legend_items)
+
+        if not all_hidden_via_toggle and time_range:
             start, end = time_range
             window = end - start
             last_ts = max(
@@ -458,22 +471,28 @@ def update_map(store_data, time_range, uv_scale, region_store, n_intervals):
             )
             shifted_range = [last_ts - window, last_ts]
             data_children, bounds, legend_items, gbounds = _build_map_children(
-                latlon_records, uv_records, shifted_range, uv_scale, region_key
+                latlon_records, uv_records, shifted_range, uv_scale, region_key, hidden=hidden
             )
             if data_children:
                 last_dt = dt.datetime.utcfromtimestamp(last_ts).strftime("%Y-%m-%d")
                 all_children = [tile, zoom_ctrl] + data_children
                 vp = _viewport_for_bounds(bounds) if region_key == 'auto' else _viewport_for_preset(region_key)
+                if is_visibility_toggle:
+                    vp = no_update
                 return (all_children, vp, True,
                     f"No data found for the selected time range. Showing the same time window ending at the last available data ({last_dt}).",
                     _legend_children(legend_items), gbounds)
 
-        vp = _viewport_for_preset(region_key) if region_key != 'auto' else no_update
-        return [tile, zoom_ctrl], vp, False, "", [], {}
+        vp = no_update if is_visibility_toggle else (
+            _viewport_for_preset(region_key) if region_key != 'auto' else no_update
+        )
+        return [tile, zoom_ctrl], vp, False, "", _legend_children(legend_items), gbounds
 
     all_children = [tile, zoom_ctrl] + data_children
     legend = _legend_children(legend_items)
 
+    if is_visibility_toggle:
+        return all_children, no_update, False, "", legend, gbounds
     if region_key == 'auto':
         vp = no_update if is_interval_refresh else _viewport_for_bounds(bounds)
         return all_children, vp, False, "", legend, gbounds
@@ -484,24 +503,79 @@ def update_map(store_data, time_range, uv_scale, region_store, n_intervals):
 def _legend_children(legend_items):
     if not legend_items:
         return []
-    return [
-        html.Div("Gliders", className="map-legend-title"),
-        html.Div([
+    any_visible = any(not h for _, _, h in legend_items)
+    master_icon = "bi-eye" if any_visible else "bi-eye-slash"
+    rows = []
+    for sn, color_hex, hidden in legend_items:
+        eye_icon = "bi-eye-slash" if hidden else "bi-eye"
+        rows.append(html.Div([
             html.Button(
                 [
                     html.Span(className="map-legend-swatch",
-                              style={"backgroundColor": color_hex}),
-                    html.Span(f"Spray {sn}", className="map-legend-label"),
+                              style={"backgroundColor": color_hex,
+                                     "opacity": 0.3 if hidden else 1.0}),
+                    html.Span(f"Spray {sn}",
+                              className="map-legend-label"
+                                        + (" map-legend-label-hidden" if hidden else "")),
                 ],
                 id={"type": "legend-item", "index": str(sn)},
                 className="map-legend-item",
                 n_clicks=0,
-            )
-            for sn, color_hex in legend_items
-        ], className="map-legend-list"),
+            ),
+            html.Button(
+                html.I(className=f"bi {eye_icon}"),
+                id={"type": "legend-eye", "index": str(sn)},
+                className="map-legend-eye",
+                n_clicks=0,
+                title="Hide" if not hidden else "Show",
+            ),
+        ], className="map-legend-row"))
+    return [
+        html.Div([
+            html.Span("Gliders", className="map-legend-title"),
+            html.Button(
+                html.I(className=f"bi {master_icon}"),
+                id="map-legend-master-eye",
+                className="map-legend-eye map-legend-eye-master",
+                n_clicks=0,
+                title="Hide all" if any_visible else "Show all",
+            ),
+        ], className="map-legend-header"),
+        html.Div(rows, className="map-legend-list"),
     ]
 
 
+
+
+@app.callback(
+    Output(StoreIds.LEGEND_HIDDEN_STORE, "data"),
+    Input({"type": "legend-eye", "index": ALL}, "n_clicks"),
+    Input("map-legend-master-eye", "n_clicks"),
+    State(StoreIds.LEGEND_HIDDEN_STORE, "data"),
+    State(StoreIds.LEGEND_BOUNDS_STORE, "data"),
+    prevent_initial_call=True,
+)
+def toggle_legend_visibility(_eye_clicks, _master_clicks, hidden, gbounds):
+    trig = dash.ctx.triggered_id
+    if not trig:
+        raise PreventUpdate
+    triggered_prop = dash.ctx.triggered[0]
+    if not triggered_prop.get("value"):
+        raise PreventUpdate
+
+    hidden_set = set(hidden or [])
+
+    if trig == "map-legend-master-eye":
+        all_sns = set(map(str, (gbounds or {}).keys()))
+        any_visible = bool(all_sns - hidden_set)
+        return sorted(all_sns) if any_visible else []
+
+    sn = str(trig["index"])
+    if sn in hidden_set:
+        hidden_set.remove(sn)
+    else:
+        hidden_set.add(sn)
+    return sorted(hidden_set)
 
 
 @app.callback(
