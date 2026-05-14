@@ -53,10 +53,18 @@
 
     background: white;
     border-radius: 12px;
-    padding: 1rem 1.25rem;
+    padding: 0.5rem 0.625rem;
 
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
     z-index: 1000;
+}
+
+/* ── Overlay accordion: halved padding on header + body ── */
+.map-overlay .accordion-button {
+    padding: 0.5rem 0.625rem;
+}
+.map-overlay .accordion-body {
+    padding: 0.5rem 0.625rem;
 }
 
 /* ── Mobile overlay toggle tab ── */
@@ -198,3 +206,58 @@
     stroke-opacity: 0.7 !important;
 }
 
+
+/* ── Map legend (top-right overlay) ── */
+.map-legend {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    z-index: 500;
+    background: rgba(255,255,255,0.92);
+    border: 1px solid rgba(0,0,0,0.15);
+    border-radius: 6px;
+    padding: 0.5rem 0.6rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    font-size: 0.85rem;
+    max-width: 12rem;
+    pointer-events: auto;
+}
+.map-legend:empty {
+    display: none;
+}
+.map-legend-title {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    color: #333;
+}
+.map-legend-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+.map-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.15rem 0.25rem;
+    background: transparent;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    text-align: left;
+    color: #222;
+    font: inherit;
+}
+.map-legend-item:hover {
+    background: rgba(0,0,0,0.06);
+}
+.map-legend-swatch {
+    display: inline-block;
+    width: 1rem;
+    height: 0.35rem;
+    border-radius: 1px;
+    flex-shrink: 0;
+}
+.map-legend-label {
+    white-space: nowrap;
+}

@@ -232,10 +232,11 @@ GLIDER_ICON = dict(
 def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region_key):
     """Build dash-leaflet children, bounds, and legend for the map.
 
-    Returns (children, bounds, legend_children) where:
+    Returns (children, bounds, legend_items, per_glider_bounds) where:
       children: list of dl components (Polyline, Marker, LayerGroup)
-      bounds: [[south, west], [north, east]] or None
-      legend_items: list of (glider_sn, color_hex) for legend
+      bounds: [[south, west], [north, east]] or None — overall fit bounds
+      legend_items: list of (glider_sn, color_hex) in display order
+      per_glider_bounds: dict[sn, [[s,w],[n,e]]] for legend click-to-zoom
     """
     COLOR_CYCLE = cycle([
         ( 31, 119, 180), # blue
@@ -248,6 +249,7 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region
 
     children = []
     legend_items = []
+    per_glider_bounds = {}
     maxlat, minlat, maxlon, minlon = -180, 180, -180, 180
 
     sorted_gliders = sorted(
@@ -285,11 +287,18 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region
 
         legend_items.append((glider_sn, color_hex))
 
-        # set map bounds
-        minlat = min(minlat, float(df["lat"].min()))
-        maxlat = max(maxlat, float(df["lat"].max()))
-        minlon = min(minlon, float(df["lon"].min()))
-        maxlon = max(maxlon, float(df["lon"].max()))
+        # per-glider bounds (for legend click-to-zoom)
+        g_minlat = float(df["lat"].min())
+        g_maxlat = float(df["lat"].max())
+        g_minlon = float(df["lon"].min())
+        g_maxlon = float(df["lon"].max())
+        per_glider_bounds[glider_sn] = [[g_minlat, g_minlon], [g_maxlat, g_maxlon]]
+
+        # set overall map bounds
+        minlat = min(minlat, g_minlat)
+        maxlat = max(maxlat, g_maxlat)
+        minlon = min(minlon, g_minlon)
+        maxlon = max(maxlon, g_maxlon)
 
         for section, df_sec in df.groupby("section", sort=False):
             opacity = float(opacities[section-1])
@@ -378,10 +387,10 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region
         )
 
     if not children:
-        return [], None, []
+        return [], None, [], {}
 
     bounds = [[minlat, minlon], [maxlat, maxlon]]
-    return children, bounds, legend_items
+    return children, bounds, legend_items, per_glider_bounds
 
 
 def _viewport_for_bounds(bounds):
@@ -404,6 +413,8 @@ def _viewport_for_preset(region_key):
     Output(MapIds.MAP, "viewport"),
     Output(AlertIds.BANNER, "is_open"),
     Output(AlertIds.BANNER, "children"),
+    Output(ContainerIds.MAP_LEGEND, "children"),
+    Output(StoreIds.LEGEND_BOUNDS_STORE, "data"),
     Input(StoreIds.MAPDATA_STORE, "data"),
     Input(StoreIds.TIMERANGE_STORE, "data"),
     Input(ControlIds.UV_SCALE, "value"),
@@ -430,9 +441,9 @@ def update_map(store_data, time_range, uv_scale, region_store, n_intervals):
 
     if not latlon_records:
         vp = _viewport_for_preset(region_key) if region_key != 'auto' else no_update
-        return [tile, zoom_ctrl], vp, False, ""
+        return [tile, zoom_ctrl], vp, False, "", [], {}
 
-    data_children, bounds, _ = _build_map_children(
+    data_children, bounds, legend_items, gbounds = _build_map_children(
         latlon_records, uv_records, time_range, uv_scale, region_key
     )
 
@@ -446,28 +457,71 @@ def update_map(store_data, time_range, uv_scale, region_store, n_intervals):
                 for r in records if r.get("time") is not None and not np.isnan(r["time"])
             )
             shifted_range = [last_ts - window, last_ts]
-            data_children, bounds, _ = _build_map_children(
+            data_children, bounds, legend_items, gbounds = _build_map_children(
                 latlon_records, uv_records, shifted_range, uv_scale, region_key
             )
             if data_children:
                 last_dt = dt.datetime.utcfromtimestamp(last_ts).strftime("%Y-%m-%d")
                 all_children = [tile, zoom_ctrl] + data_children
                 vp = _viewport_for_bounds(bounds) if region_key == 'auto' else _viewport_for_preset(region_key)
-                return all_children, vp, True, \
-                    f"No data found for the selected time range. Showing the same time window ending at the last available data ({last_dt})."
+                return (all_children, vp, True,
+                    f"No data found for the selected time range. Showing the same time window ending at the last available data ({last_dt}).",
+                    _legend_children(legend_items), gbounds)
 
         vp = _viewport_for_preset(region_key) if region_key != 'auto' else no_update
-        return [tile, zoom_ctrl], vp, False, ""
+        return [tile, zoom_ctrl], vp, False, "", [], {}
 
     all_children = [tile, zoom_ctrl] + data_children
+    legend = _legend_children(legend_items)
 
     if region_key == 'auto':
         vp = no_update if is_interval_refresh else _viewport_for_bounds(bounds)
-        return all_children, vp, False, ""
+        return all_children, vp, False, "", legend, gbounds
     else:
-        return all_children, _viewport_for_preset(region_key), False, ""
+        return all_children, _viewport_for_preset(region_key), False, "", legend, gbounds
 
 
+def _legend_children(legend_items):
+    if not legend_items:
+        return []
+    return [
+        html.Div("Gliders", className="map-legend-title"),
+        html.Div([
+            html.Button(
+                [
+                    html.Span(className="map-legend-swatch",
+                              style={"backgroundColor": color_hex}),
+                    html.Span(f"Spray {sn}", className="map-legend-label"),
+                ],
+                id={"type": "legend-item", "index": str(sn)},
+                className="map-legend-item",
+                n_clicks=0,
+            )
+            for sn, color_hex in legend_items
+        ], className="map-legend-list"),
+    ]
+
+
+
+
+@app.callback(
+    Output(MapIds.MAP, "viewport", allow_duplicate=True),
+    Input({"type": "legend-item", "index": ALL}, "n_clicks"),
+    State(StoreIds.LEGEND_BOUNDS_STORE, "data"),
+    prevent_initial_call=True,
+)
+def zoom_to_legend(_clicks, gbounds):
+    trig = dash.ctx.triggered_id
+    if not trig or not gbounds:
+        raise PreventUpdate
+    triggered_prop = dash.ctx.triggered[0]
+    if not triggered_prop.get("value"):
+        raise PreventUpdate
+    sn = trig["index"]
+    bounds = gbounds.get(sn)
+    if not bounds:
+        raise PreventUpdate
+    return _viewport_for_bounds(bounds)
 
 
 def load_mapdata_from_source():
@@ -566,10 +620,20 @@ def set_glider_options(store_data, search_value):
         rows.append((disabled, sn, region_lbl, search_text))
     rows.sort(key=lambda r: r[1])
     sv = search_value or ""
+    gray = {"color": "#999", "marginLeft": "0.5em"}
+    disabled_style = {"color": "#aaa"}
+
+    def label(disabled, sn, region_lbl):
+        primary = html.Span(f"Spray {sn}", style=disabled_style) if disabled else f"Spray {sn}"
+        suffix = []
+        if region_lbl:
+            suffix.append(html.Span(f" {region_lbl}", style=gray))
+        if disabled:
+            suffix.append(html.Span(" (no data)", style=gray))
+        return html.Span([primary, *suffix])
+
     return [{
-        "label": f"Spray {sn}"
-                 + (f" — {region_lbl}" if region_lbl else "")
-                 + (" (no data)" if disabled else ""),
+        "label": label(disabled, sn, region_lbl),
         "value": sn,
         "disabled": disabled,
         "search": f"{search_text} {sv}",

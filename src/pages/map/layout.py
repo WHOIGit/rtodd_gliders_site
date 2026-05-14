@@ -187,20 +187,18 @@ def section_details_div():
 
 
 def float_box():
-    intro = intro_div()
     options = options_div()
     sections_info = section_details_div()
 
     accordion = dbc.Accordion(
         [
-            dbc.AccordionItem(intro, title="Spray Glider Operations at WHOI", item_id="map-info"),
             dbc.AccordionItem(options, title="Map Options"),
             dbc.AccordionItem(sections_info, title="Section Details", item_id=ContainerIds.SECTION_DETAILS),
         ],
         id=ContainerIds.MAP_ACCORDION,
         flush=True,
         always_open=False,
-        active_item='map-info',
+        active_item=None,
     )
 
     return html.Div(
@@ -245,8 +243,13 @@ def main_layout():
         style={"height": "100%", "width": "100%"},
     )
 
+    legend_box = html.Div(
+        id=ContainerIds.MAP_LEGEND,
+        className="map-legend",
+    )
+
     map_div = html.Div(
-        [leaflet_map, loading_overlay],
+        [leaflet_map, loading_overlay, legend_box],
         className="flex-grow-1 d-flex flex-column",
         style={"position": "relative", "minHeight": 0},
     )
@@ -268,6 +271,7 @@ def main_layout():
             dcc.Store(id=StoreIds.TIMERANGE_STORE, storage_type="memory", data=[start, None]),
             dcc.Store(id=StoreIds.TIMEBTN_ACTIVE_STORE, storage_type="memory", data=ControlIds.TIME_BTN_MONTH),
             dcc.Store(id=StoreIds.REGION_ACTIVE_STORE, storage_type="memory", data={"region": _default_region, "n": 0}),
+            dcc.Store(id=StoreIds.LEGEND_BOUNDS_STORE, storage_type="memory", data={}),
 
             # periodic check for updated data files
             dcc.Interval(id=IntervalIds.DATA_REFRESH, interval=5 * 60 * 1000, n_intervals=0),

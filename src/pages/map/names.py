@@ -7,6 +7,7 @@ class StoreIds:
     TIMERANGE_STORE = "time-range-store"
     TIMEBTN_ACTIVE_STORE = "time-btn-active-store"
     REGION_ACTIVE_STORE = "region-active-store"
+    LEGEND_BOUNDS_STORE = "legend-bounds-store"
 
 class ControlIds:
     TIME_BTN_DAY = "time-btn-day"
@@ -30,6 +31,7 @@ class ContainerIds:
     HIDDEN_CUSTOMTIME_CONTAINER = "time-custom-container"
     SECTION_DETAILS = "accordion-section-details"
     MAP_LOADING_OVERLAY = "map-loading-overlay"
+    MAP_LEGEND = "map-legend"
 
 class TextIds:
     SECTION_DETAILS_TEXT = "section-details-text"
