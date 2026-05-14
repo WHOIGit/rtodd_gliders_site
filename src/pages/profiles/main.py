@@ -8,9 +8,41 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from data_loader import GliderDataLoader, parse_mission_yyyymmm
-from utils import time_ticks
+from utils import time_ticks, load_region_labels
 from .layout import layout
 from .names import AdvStoreIds, AdvControlIds, AdvGraphIds, AdvContainerIds
+
+_REGION_LABELS = load_region_labels(Path("config/map_config.yml").resolve())
+
+
+def _region_display(key: str) -> str:
+    return _REGION_LABELS.get(key, key)
+
+
+def _make_search_text(*parts: str) -> str:
+    """Build the lowercased search-source for a dropdown option.
+
+    For each part, include both the lowercased text and a no-space variant so
+    queries like 'gulf' match 'gulfstream' and 'Gulf Stream' alike.
+    """
+    pieces = []
+    for p in parts:
+        if not p:
+            continue
+        s = str(p).lower()
+        pieces.append(s)
+        if " " in s:
+            pieces.append(s.replace(" ", ""))
+    return " ".join(pieces)
+
+
+def _matches_query(search_text: str, query: str | None) -> bool:
+    """Token-AND match: every whitespace-separated token in query must appear."""
+    if not query:
+        return True
+    q = query.lower()
+    # Allow queries with embedded spaces by splitting; each token is substring.
+    return all(tok in search_text for tok in q.split())
 
 dash.register_page(
     __name__,
@@ -672,43 +704,64 @@ def _option_label(primary: str, suffix: str, disabled: bool = False):
     Output(AdvControlIds.GLIDER_SELECT, "placeholder"),
     Output(AdvControlIds.GLIDER_LABEL, "children"),
     Input(AdvControlIds.ARCHIVED_TOGGLE, "value"),
+    Input(AdvControlIds.GLIDER_SELECT, "search_value"),
+    State(AdvControlIds.GLIDER_SELECT, "value"),
 )
-def populate_glider_options(archived_value):
+def populate_glider_options(archived_value, search_value, current_value):
     gdl = _get_gdl()
     archived = "on" in (archived_value or [])
+    is_search = dash.ctx.triggered_id == AdvControlIds.GLIDER_SELECT
 
     if archived:
         ids = gdl.archive_mission_ids()
         rows = []
         for mid in ids:
             meta = gdl.archive_missions.get(mid, {})
-            region = meta.get("region", "")
-            yymm = parse_mission_yyyymmm(mid)
-            suffix = f" {region} - {yymm}" if region else f" {yymm}"
+            region_key = meta.get("region", "")
+            region_lbl = _region_display(region_key)
+            yymm = parse_mission_yyyymmm(mid)  # e.g. "2025 Dec"
+            year = yymm.split(" ")[0] if yymm and yymm != "?" else ""
+            month = yymm.split(" ")[1] if yymm and " " in yymm else ""
+            suffix = f" {region_lbl} - {yymm}" if region_lbl else f" {yymm}"
             disabled = not gdl.has_json(mid)
-            rows.append((disabled, mid, suffix))
-        rows.sort(key=lambda r: (r[0], r[1]))
+            search_text = _make_search_text(mid, region_key, region_lbl, year, month)
+            if not _matches_query(search_text, search_value):
+                continue
+            rows.append((disabled, mid, suffix, search_text))
+        rows.sort(key=lambda r: r[1])
+        sv = search_value or ""
         opts = [{
             "label": _option_label(mid, suffix, disabled=disabled),
             "value": mid,
             "disabled": disabled,
-        } for disabled, mid, suffix in rows]
-        return opts, None, "Select mission...", "Mission"
+            "search": f"{search_text} {sv}",
+        } for disabled, mid, suffix, search_text in rows]
+        new_value = no_update if is_search else None
+        return opts, new_value, "Select mission...", "Mission"
 
     sns = gdl.all_active_sns()
     rows = []
     for sn in sns:
-        region = gdl.active_meta.get(sn, {}).get("region", "")
-        suffix = f" {region}" if region else ""
+        region_key = gdl.active_meta.get(sn, {}).get("region", "")
+        region_lbl = _region_display(region_key)
+        suffix = f" {region_lbl}" if region_lbl else ""
         disabled = not gdl.has_json(sn)
-        rows.append((disabled, sn, suffix))
-    rows.sort(key=lambda r: (r[0], r[1]))
+        search_text = _make_search_text(sn, f"spray {sn}", region_key, region_lbl)
+        if not _matches_query(search_text, search_value):
+            continue
+        rows.append((disabled, sn, suffix, search_text))
+    rows.sort(key=lambda r: r[1])
+    sv = search_value or ""
     opts = [{
         "label": _option_label(f"Spray {sn}", suffix, disabled=disabled),
         "value": sn,
         "disabled": disabled,
-    } for disabled, sn, suffix in rows]
-    loaded_sns = [sn for sn in sns if gdl.has_json(sn)]
-    mtimes = {sn: t for sn, t in gdl.sn_mtimes().items() if sn in loaded_sns}
-    most_recent = max(mtimes, key=mtimes.get) if mtimes else (loaded_sns[0] if loaded_sns else None)
-    return opts, most_recent, "Select glider...", "Glider"
+        "search": f"{search_text} {sv}",
+    } for disabled, sn, suffix, search_text in rows]
+    if is_search:
+        new_value = no_update
+    else:
+        loaded = [sn for sn in sns if gdl.has_json(sn)]
+        mtimes = {sn: t for sn, t in gdl.sn_mtimes().items() if sn in loaded}
+        new_value = max(mtimes, key=mtimes.get) if mtimes else (loaded[0] if loaded else None)
+    return opts, new_value, "Select glider...", "Glider"

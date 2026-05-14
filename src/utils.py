@@ -143,6 +143,14 @@ def asset_url(filename: str, url_prefix: str = "/assets/") -> str:
     return app_prefix.rstrip("/") + url_prefix + filename
 
 
+def load_region_labels(config_path) -> dict[str, str]:
+    """Map region key -> human label, e.g. 'gulfstream' -> 'Gulf Stream'."""
+    import yaml
+    with open(config_path) as f:
+        cfg = yaml.safe_load(f)
+    return {k: v.get("label", k) for k, v in cfg.get("regions", {}).items()}
+
+
 def load_map_region_config(config_path, active_regions=None):
     """
     Load map config from a YAML file (map_config.yml).

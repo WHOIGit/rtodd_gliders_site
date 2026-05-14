@@ -17,7 +17,31 @@ import pandas as pd
 from dash.exceptions import PreventUpdate
 
 from data_loader import GliderDataLoader
-from utils import latlon_offset, load_map_region_config
+from utils import latlon_offset, load_map_region_config, load_region_labels
+
+_REGION_LABELS = load_region_labels(Path("config/map_config.yml").resolve())
+
+
+def _region_display(key: str) -> str:
+    return _REGION_LABELS.get(key, key)
+
+
+def _make_search_text(*parts):
+    pieces = []
+    for p in parts:
+        if not p:
+            continue
+        s = str(p).lower()
+        pieces.append(s)
+        if " " in s:
+            pieces.append(s.replace(" ", ""))
+    return " ".join(pieces)
+
+
+def _matches_query(search_text, query):
+    if not query:
+        return True
+    return all(tok in search_text for tok in query.lower().split())
 from .layout import layout, TILE_URL
 from names import *
 from .names import *
@@ -523,20 +547,33 @@ def toggle_custom_time_picker(
 @app.callback(
     Output(ControlIds.GLIDER_SELECT, "options"),
     Input(StoreIds.MAPDATA_STORE, "data"),
+    Input(ControlIds.GLIDER_SELECT, "search_value"),
 )
-def set_glider_options(store_data):
+def set_glider_options(store_data, search_value):
     store_data = store_data or {}
     latlon_records = store_data.get("latlon_records", {})
     loaded = set(latlon_records.keys())
     gdl = GliderDataLoader(data_dir=Path("./data/sync"), auto_load=False)
     all_sns = sorted(set(gdl.all_active_sns()) | loaded)
-    rows = [(sn not in loaded, sn) for sn in all_sns]
-    rows.sort(key=lambda r: (r[0], r[1]))
+    rows = []
+    for sn in all_sns:
+        disabled = sn not in loaded
+        region_key = gdl.active_meta.get(sn, {}).get("region", "")
+        region_lbl = _region_display(region_key)
+        search_text = _make_search_text(sn, f"spray {sn}", region_key, region_lbl)
+        if not _matches_query(search_text, search_value):
+            continue
+        rows.append((disabled, sn, region_lbl, search_text))
+    rows.sort(key=lambda r: r[1])
+    sv = search_value or ""
     return [{
-        "label": f"Spray {sn}" + (" (no data)" if disabled else ""),
+        "label": f"Spray {sn}"
+                 + (f" — {region_lbl}" if region_lbl else "")
+                 + (" (no data)" if disabled else ""),
         "value": sn,
         "disabled": disabled,
-    } for disabled, sn in rows]
+        "search": f"{search_text} {sv}",
+    } for disabled, sn, region_lbl, search_text in rows]
 
 
 @app.callback(
