@@ -3,12 +3,12 @@ from pathlib import Path
 import pandas as pd
 
 import dash
-from dash import Input, Output, State, no_update
+from dash import Input, Output, State, no_update, html
 from dash.exceptions import PreventUpdate
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from data_loader import GliderDataLoader
+from data_loader import GliderDataLoader, parse_mission_yyyymmm
 from utils import time_ticks
 from .layout import layout
 from .names import EngStoreIds, EngControlIds, EngGraphIds
@@ -77,26 +77,63 @@ def _empty_fig(msg="No data"):
 # ---------------------------------------------------------------------------
 # CB-1: Populate glider dropdown on page load
 # ---------------------------------------------------------------------------
+_GRAY = {"color": "#999", "marginLeft": "0.5em"}
+_DISABLED_PRIMARY = {"color": "#aaa"}
+
+
+def _option_label(primary: str, suffix: str, disabled: bool = False):
+    primary_node = html.Span(primary, style=_DISABLED_PRIMARY) if disabled else primary
+    if not suffix:
+        return html.Span([primary_node]) if disabled else primary
+    return html.Span([primary_node, html.Span(suffix, style=_GRAY)])
+
+
 @app.callback(
     Output(EngControlIds.GLIDER_SELECT, "options"),
     Output(EngControlIds.GLIDER_SELECT, "value"),
-    Input(EngControlIds.GLIDER_SELECT, "id"),
+    Output(EngControlIds.GLIDER_SELECT, "placeholder"),
+    Output(EngControlIds.GLIDER_LABEL, "children"),
+    Input(EngControlIds.ARCHIVED_TOGGLE, "value"),
 )
-def populate_glider_options(_):
+def populate_glider_options(archived_value):
     gdl = _get_gdl()
-    sns = gdl.all_active_sns()
-    opts = []
-    for sn in sns:
-        disabled = not gdl.has_json(sn)
-        opts.append({
-            "label": f"Spray {sn}" + (" (no data)" if disabled else ""),
-            "value": sn,
+    archived = "on" in (archived_value or [])
+
+    if archived:
+        ids = gdl.archive_mission_ids()
+        rows = []
+        for mid in ids:
+            meta = gdl.archive_missions.get(mid, {})
+            region = meta.get("region", "")
+            yymm = parse_mission_yyyymmm(mid)
+            suffix = f" {region} - {yymm}" if region else f" {yymm}"
+            disabled = not gdl.has_json(mid)
+            rows.append((disabled, mid, suffix))
+        rows.sort(key=lambda r: (r[0], r[1]))
+        opts = [{
+            "label": _option_label(mid, suffix, disabled=disabled),
+            "value": mid,
             "disabled": disabled,
-        })
+        } for disabled, mid, suffix in rows]
+        return opts, None, "Select mission...", "Mission"
+
+    sns = gdl.all_active_sns()
+    rows = []
+    for sn in sns:
+        region = gdl.active_meta.get(sn, {}).get("region", "")
+        suffix = f" {region}" if region else ""
+        disabled = not gdl.has_json(sn)
+        rows.append((disabled, sn, suffix))
+    rows.sort(key=lambda r: (r[0], r[1]))
+    opts = [{
+        "label": _option_label(f"Spray {sn}", suffix, disabled=disabled),
+        "value": sn,
+        "disabled": disabled,
+    } for disabled, sn, suffix in rows]
     loaded_sns = [sn for sn in sns if gdl.has_json(sn)]
     mtimes = {sn: t for sn, t in gdl.sn_mtimes().items() if sn in loaded_sns}
     most_recent = max(mtimes, key=mtimes.get) if mtimes else (loaded_sns[0] if loaded_sns else None)
-    return opts, most_recent
+    return opts, most_recent, "Select glider...", "Glider"
 
 
 # ---------------------------------------------------------------------------
@@ -117,6 +154,8 @@ def on_glider_select(glider_sn):
 
     glider_sn = str(glider_sn)
     gdl = _get_gdl()
+    if len(glider_sn) > 4 or glider_sn in gdl.archive_missions:
+        gdl.load_archived(glider_sn)
     gdl.load_eng(glider_sn)
     filename = gdl.sn_to_filename(glider_sn)
     data = gdl.glider_jsons[filename]
@@ -124,6 +163,12 @@ def on_glider_select(glider_sn):
     if eng is None:
         raise PreventUpdate
     tl_time = data["time"]
+
+    def _get(key, i):
+        seq = eng.get(key)
+        if seq is None or i >= len(seq):
+            return None
+        return seq[i]
 
     rows = []
     for i, ndive in enumerate(eng["ndive"]):
@@ -133,14 +178,14 @@ def on_glider_select(glider_sn):
         if not t_pair:
             continue
         dive_time = t_pair[0]
-        p_series = eng["p"][i] if i < len(eng["p"]) else []
+        p_series = eng["p"][i] if "p" in eng and i < len(eng["p"]) else []
         rows.append({
             "ndive":    int(ndive),
             "datetime": dive_time,
-            "psurf":    eng["psurf"][i],
-            "pmax":     eng["pmax"][i],
+            "psurf":    _get("psurf", i),
+            "pmax":     _get("pmax", i),
             "pmin":     min(p_series) if p_series else None,
-            "divetime": eng["divetime"][i],
+            "divetime": _get("divetime", i),
         })
 
     max_dive = max(r["ndive"] for r in rows) if rows else 1
@@ -320,6 +365,8 @@ def update_dive_fig(dive_num, glider_store):
 
     glider_sn = str(glider_store["sn"])
     gdl = _get_gdl()
+    if len(glider_sn) > 4 or glider_sn in gdl.archive_missions:
+        gdl.load_archived(glider_sn)
     gdl.load_eng(glider_sn)
     filename = gdl.sn_to_filename(glider_sn)
     data = gdl.glider_jsons[filename]

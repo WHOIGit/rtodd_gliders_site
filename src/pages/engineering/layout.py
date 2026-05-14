@@ -11,7 +11,27 @@ def make_layout():
     ])
 
     glider_control = html.Div([
-        html.Label("Glider", className="fw-semibold mb-1"),
+        dbc.Row([
+            dbc.Col(
+                html.Label(
+                    id=EngControlIds.GLIDER_LABEL,
+                    children="Glider",
+                    className="fw-semibold mb-0",
+                ),
+                width="auto",
+            ),
+            dbc.Col(
+                dbc.Checklist(
+                    id=EngControlIds.ARCHIVED_TOGGLE,
+                    options=[{"label": "Archived", "value": "on"}],
+                    value=[],
+                    switch=True,
+                    inline=True,
+                    className="mb-0",
+                ),
+                className="d-flex align-items-center justify-content-end",
+            ),
+        ], className="mb-1 align-items-center"),
         dcc.Dropdown(
             id=EngControlIds.GLIDER_SELECT,
             options=[],

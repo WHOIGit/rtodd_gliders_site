@@ -530,15 +530,13 @@ def set_glider_options(store_data):
     loaded = set(latlon_records.keys())
     gdl = GliderDataLoader(data_dir=Path("./data"), auto_load=False)
     all_sns = sorted(set(gdl.all_active_sns()) | loaded)
-    opts = []
-    for sn in all_sns:
-        disabled = sn not in loaded
-        opts.append({
-            "label": f"Spray {sn}" + (" (no data)" if disabled else ""),
-            "value": sn,
-            "disabled": disabled,
-        })
-    return opts
+    rows = [(sn not in loaded, sn) for sn in all_sns]
+    rows.sort(key=lambda r: (r[0], r[1]))
+    return [{
+        "label": f"Spray {sn}" + (" (no data)" if disabled else ""),
+        "value": sn,
+        "disabled": disabled,
+    } for disabled, sn in rows]
 
 
 @app.callback(

@@ -679,31 +679,35 @@ def populate_glider_options(archived_value):
 
     if archived:
         ids = gdl.archive_mission_ids()
-        opts = []
+        rows = []
         for mid in ids:
             meta = gdl.archive_missions.get(mid, {})
             region = meta.get("region", "")
             yymm = parse_mission_yyyymmm(mid)
             suffix = f" {region} - {yymm}" if region else f" {yymm}"
             disabled = not gdl.has_json(mid)
-            opts.append({
-                "label": _option_label(mid, suffix, disabled=disabled),
-                "value": mid,
-                "disabled": disabled,
-            })
+            rows.append((disabled, mid, suffix))
+        rows.sort(key=lambda r: (r[0], r[1]))
+        opts = [{
+            "label": _option_label(mid, suffix, disabled=disabled),
+            "value": mid,
+            "disabled": disabled,
+        } for disabled, mid, suffix in rows]
         return opts, None, "Select mission...", "Mission"
 
     sns = gdl.all_active_sns()
-    opts = []
+    rows = []
     for sn in sns:
         region = gdl.active_meta.get(sn, {}).get("region", "")
         suffix = f" {region}" if region else ""
         disabled = not gdl.has_json(sn)
-        opts.append({
-            "label": _option_label(f"Spray {sn}", suffix, disabled=disabled),
-            "value": sn,
-            "disabled": disabled,
-        })
+        rows.append((disabled, sn, suffix))
+    rows.sort(key=lambda r: (r[0], r[1]))
+    opts = [{
+        "label": _option_label(f"Spray {sn}", suffix, disabled=disabled),
+        "value": sn,
+        "disabled": disabled,
+    } for disabled, sn, suffix in rows]
     loaded_sns = [sn for sn in sns if gdl.has_json(sn)]
     mtimes = {sn: t for sn, t in gdl.sn_mtimes().items() if sn in loaded_sns}
     most_recent = max(mtimes, key=mtimes.get) if mtimes else (loaded_sns[0] if loaded_sns else None)
