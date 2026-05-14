@@ -50,7 +50,7 @@ class GliderDataLoader:
 
     def __init__(self, data_dir: Path, auto_load: bool = False, split_dir: Optional[Path] = None):
         self.data_dir = data_dir
-        self.split_dir = split_dir if split_dir is not None else data_dir / "split"
+        self.split_dir = split_dir if split_dir is not None else data_dir.parent / "splits"
         self.glider_jsons: Dict[str, Dict[str, Any]] = dict()
         self.selected_files: list[str] = []
         self.section_ranges: Dict[str, list[tuple[int, float]]] = dict()

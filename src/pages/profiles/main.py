@@ -22,7 +22,7 @@ dash.register_page(
 app = dash.get_app()
 
 def _get_gdl() -> GliderDataLoader:
-    return GliderDataLoader(data_dir=Path("./data"), auto_load=True)
+    return GliderDataLoader(data_dir=Path("./data/sync"), auto_load=True)
 
 # ArcGIS ocean basemap config (same as map page)
 _map_tile_layer = dict(

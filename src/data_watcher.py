@@ -18,8 +18,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DATA_DIR = Path(os.environ.get("DATA_DIR", "/app/data"))
-SPLIT_DIR = DATA_DIR / "split"
+DATA_DIR = Path(os.environ.get("DATA_DIR", "/app/data/sync"))
+SPLIT_DIR = Path(os.environ.get("SPLIT_DIR", str(DATA_DIR.parent / "splits")))
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "300"))
 
 TRACK_KEYS = {"mission", "glider_version", "time", "lat", "lon", "u", "v"}
@@ -136,7 +136,7 @@ def split_glider_streaming(web_json_path: Path, split_dir: Path, glider_id: str)
 
 def build_manifest(gliders: dict) -> dict:
     return {
-        "version": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+        "version": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "gliders": gliders,
     }
 
