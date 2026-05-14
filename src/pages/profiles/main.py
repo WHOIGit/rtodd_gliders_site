@@ -286,8 +286,12 @@ def update_cast_options(instrument_name, selection, glider_sn):
         return _all_opts
 
     ndive_range = tuple(selection["dive_range"]) if selection.get("dive_range") else None
+    glider_sn = str(glider_sn)
+    gdl = _get_gdl()
+    if len(glider_sn) > 4 or glider_sn in gdl.archive_missions:
+        gdl.load_archived(glider_sn)
     try:
-        df = _get_gdl().build_instrument_df(str(glider_sn), instrument_name, ndive_range=ndive_range)
+        df = gdl.build_instrument_df(glider_sn, instrument_name, ndive_range=ndive_range)
     except (KeyError, ValueError):
         return _all_opts
 
@@ -336,8 +340,12 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
 
     ndive_range = tuple(selection["dive_range"]) if selection.get("dive_range") else None
 
+    gdl = _get_gdl()
+    if len(glider_sn) > 4 or glider_sn in gdl.archive_missions:
+        gdl.load_archived(glider_sn)
+
     try:
-        df = _get_gdl().build_instrument_df(
+        df = gdl.build_instrument_df(
             glider_sn, instrument_name,
             ndive_range=ndive_range,
             phase=phase_filter,
@@ -353,7 +361,6 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
     non_physical = {"divetime", "datetime", "depth", "p"}
     available = [c for c in df.columns if c not in exclude_cols]
 
-    gdl = _get_gdl()
     inst_key = gdl.instruments()[instrument_name]['key']
     info = gdl.glider_jsons[gdl.sn_to_filename(glider_sn)][inst_key]['info']
     field_meta = {c: info.get(c, {}) for c in available}
