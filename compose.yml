@@ -6,8 +6,8 @@ services:
       dockerfile: Dockerfile
     command: ["python", "src/data_watcher.py"]
     volumes:
-      - ./data/sync:/app/data/sync:ro
-      - ./data/netcdf:/app/data/netcdf:rw
+      - /srv/data/sync:/app/data/sync:ro
+      - /srv/data/netcdf:/app/data/netcdf:rw
     restart: unless-stopped
     env_file:
       - path: prod.env
@@ -27,7 +27,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
     volumes:
-      - ./data:/app/data:ro
+      - /srv/data:/app/data:ro
       - ./config:/app/config:ro
     #  - ./src:/app/src:ro
     # uncomment for local development

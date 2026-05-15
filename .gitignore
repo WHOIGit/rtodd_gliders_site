@@ -1,6 +1,4 @@
 data/
-.idea/
 __pycache__/
-.venv
-.env
-.python-version
+.*
+!.gitignore
