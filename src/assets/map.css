@@ -299,3 +299,130 @@
     color: #aaa;
     text-decoration: line-through;
 }
+
+/* ── Archive map legend: long region-grouped mission list ── */
+.archive-map-legend {
+    max-width: 22rem;
+    width: min(22rem, calc(100vw - 1.5rem));
+    max-height: calc(100% - 1.5rem);
+    overflow-y: auto;
+}
+
+.archive-map-legend .map-legend-header {
+    position: sticky;
+    top: -0.5rem;
+    background: rgba(255,255,255,0.96);
+    z-index: 1;
+    padding-top: 0.1rem;
+    padding-bottom: 0.2rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.archive-map-legend-region {
+    border-top: 1px solid rgba(0,0,0,0.1);
+    padding: 0.15rem 0;
+}
+
+.archive-map-legend-region-header {
+    padding: 0.25rem 0;
+    font-size: 0.82rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 0.35rem;
+    align-items: center;
+}
+
+.archive-map-legend-region-toggle {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.35rem;
+    align-items: center;
+    min-width: 0;
+    padding: 0;
+    background: transparent;
+    border: none;
+    color: #222;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.archive-map-legend-region-toggle:hover {
+    color: #000;
+}
+
+.archive-map-legend-chevron {
+    color: #666;
+    font-size: 0.75rem;
+}
+
+.map-legend-region-title {
+    font-weight: 600;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.map-legend-region-count {
+    color: #666;
+    font-size: 0.75rem;
+}
+
+.archive-map-legend-list {
+    gap: 0.05rem;
+}
+
+.archive-map-legend .map-legend-row {
+    align-items: stretch;
+}
+
+.archive-map-legend .map-legend-item {
+    min-height: 2rem;
+    padding: 0.15rem 0.2rem;
+}
+
+.archive-map-legend .map-legend-item:disabled,
+.archive-map-legend .map-legend-eye:disabled {
+    cursor: default;
+    opacity: 0.55;
+}
+
+.archive-legend-label-block {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.15;
+}
+
+.archive-legend-date {
+    color: #666;
+    font-size: 0.72rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.map-legend-row-disabled .archive-legend-date,
+.map-legend-row-disabled .map-legend-label {
+    color: #999;
+}
+
+.archive-legend-zoom {
+    color: #333;
+}
+
+.archive-year-slider {
+    padding: 0.25rem 0.25rem 1.5rem;
+}
+
+@media (max-width: 576px) {
+    .archive-map-legend {
+        top: auto;
+        bottom: 0.75rem;
+        right: 0.5rem;
+        max-height: 42%;
+        width: min(20rem, calc(100vw - 1rem));
+    }
+}
