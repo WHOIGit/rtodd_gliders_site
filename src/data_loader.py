@@ -248,6 +248,9 @@ class GliderDataLoader:
             return None
         return self.netcdf_dir / store
 
+    def _tracks_store_path(self) -> Path:
+        return self.netcdf_dir / self._manifest.get("tracks_store", "tracks.nc")
+
     def _open_dataset(self, glider_id: str) -> Dataset:
         path = self._store_path(glider_id)
         if path is None or not path.exists():
@@ -310,11 +313,69 @@ class GliderDataLoader:
 
     def _load_all_tracks(self) -> None:
         self._load_manifest()
+        if self._load_all_tracks_from_tracks_store(active_only=True):
+            logger.info(f"Loaded {len(self.glider_jsons)} track records from aggregate NetCDF")
+            return
         for sn_str in self._manifest.get("gliders", {}):
             if sn_str not in self.active_sns:
                 continue
             self._load_track(sn_str)
         logger.info(f"Loaded {len(self.glider_jsons)} track records from NetCDF")
+
+    def _tracks_group_by_id(self, ds: Dataset) -> dict[str, Any]:
+        tracks = ds.groups.get("tracks")
+        if tracks is None:
+            return {}
+        return {
+            str(getattr(group, "glider_id", name)): group
+            for name, group in tracks.groups.items()
+        }
+
+    def _track_data_from_group(self, glider_id: str, group) -> Dict[str, Any]:
+        data: Dict[str, Any] = {
+            "mission": str(getattr(group, "mission", glider_id)),
+            "glider_version": str(getattr(group, "glider_version", "")),
+        }
+        for key in ("time", "lat", "lon"):
+            data[key] = _filled(group.variables[key][:]).tolist()
+        for key in ("u", "v"):
+            data[key] = _filled(group.variables[key][:]).tolist()
+
+        inst_parent = group.groups.get("instruments")
+        if inst_parent is not None:
+            for inst_key, inst_group in inst_parent.groups.items():
+                data[inst_key] = {"info": _safe_json_attr(inst_group, "info_json", {})}
+        return data
+
+    def _load_all_tracks_from_tracks_store(self, active_only: bool = True) -> bool:
+        path = self._tracks_store_path()
+        if not path.exists():
+            return False
+        try:
+            with _NETCDF_LOCK, Dataset(path, "r") as ds:
+                for glider_id, group in self._tracks_group_by_id(ds).items():
+                    if active_only and glider_id not in self.active_sns:
+                        continue
+                    self.glider_jsons[f"{glider_id}_web.json"] = self._track_data_from_group(glider_id, group)
+        except Exception as e:
+            logger.warning(f"Failed to load aggregate tracks NetCDF {path}: {e}")
+            return False
+        self._instruments_cache = None
+        return True
+
+    def _load_track_from_tracks_store(self, glider_id: str) -> Optional[Dict[str, Any]]:
+        path = self._tracks_store_path()
+        if not path.exists():
+            return None
+        try:
+            with _NETCDF_LOCK, Dataset(path, "r") as ds:
+                group = self._tracks_group_by_id(ds).get(str(glider_id))
+                if group is None:
+                    return None
+                return self._track_data_from_group(str(glider_id), group)
+        except Exception as e:
+            logger.warning(f"Failed to load {glider_id} from aggregate tracks NetCDF {path}: {e}")
+            return None
 
     def _load_track(self, glider_id: str, force: bool = False) -> Optional[Dict[str, Any]]:
         filename = f"{glider_id}_web.json"
@@ -324,21 +385,18 @@ class GliderDataLoader:
             logger.debug(f"NetCDF store not found for {glider_id}")
             return None
 
-        with _NETCDF_LOCK, self._open_dataset(glider_id) as ds:
-            track_group = ds.groups["track"]
-            data: Dict[str, Any] = {
-                "mission": str(getattr(ds, "mission", glider_id)),
-                "glider_version": str(getattr(ds, "glider_version", "")),
-            }
-            for key in ("time", "lat", "lon"):
-                data[key] = _filled(track_group.variables[key][:]).tolist()
-            for key in ("u", "v"):
-                data[key] = _filled(track_group.variables[key][:]).tolist()
+        data = self._load_track_from_tracks_store(glider_id)
+        if data is None:
+            with _NETCDF_LOCK, self._open_dataset(glider_id) as ds:
+                track_group = ds.groups["track"]
+                data = self._track_data_from_group(glider_id, track_group)
+                data["mission"] = str(getattr(ds, "mission", glider_id))
+                data["glider_version"] = str(getattr(ds, "glider_version", ""))
 
-            inst_parent = ds.groups.get("instruments")
-            if inst_parent is not None:
-                for inst_key, inst_group in inst_parent.groups.items():
-                    data[inst_key] = {"info": _safe_json_attr(inst_group, "info_json", {})}
+                inst_parent = ds.groups.get("instruments")
+                if inst_parent is not None:
+                    for inst_key, inst_group in inst_parent.groups.items():
+                        data[inst_key] = {"info": _safe_json_attr(inst_group, "info_json", {})}
 
         self.glider_jsons[filename] = data
         self._instruments_cache = None

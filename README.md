@@ -27,7 +27,7 @@ If the codebase changes, these are also the steps needed to deploy the code chan
 - **Port:** 8050
 - **WSGI server:** gunicorn
 - **Volumes:** `./data` and `./config` are mounted read-only into the container
-- **Environment:** production defaults live in `dotenv`; local overrides live in ignored `.env`
+- **Environment:** both Compose services load required production settings from `prod.env`
 
 ## Configuration
 
@@ -45,8 +45,8 @@ Changes take effect after restarting the container (`docker compose up --force-r
 
 ### Environment variables
 
-Production defaults are committed in `dotenv`. Docker Compose also reads an ignored
-`.env` file after `dotenv`, so local or host-specific values can override the defaults.
+Production settings are committed in `prod.env` and loaded by both Compose services.
+Update `prod.env` when deployment defaults change.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -59,6 +59,7 @@ Production defaults are committed in `dotenv`. Docker Compose also reads an igno
 | `DATAPAGE_HTML_PATH` | `config/datapage.html` | Path to data page HTML |
 | `DATA_DIR` | `/app/data/sync` | Source glider JSON directory for `data-watcher` |
 | `NETCDF_DIR` | `/app/data/netcdf` | Generated NetCDF cache directory for `data-watcher` and the app |
+| `TRACKS_NETCDF` | `tracks.nc` | Aggregate tracks-only NetCDF used for map loading |
 | `POLL_INTERVAL` | `300` | Seconds between `data-watcher` source scans |
 
 ## Local Development

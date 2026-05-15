@@ -22,18 +22,24 @@ logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/app/data/sync"))
 NETCDF_DIR = Path(os.environ.get("NETCDF_DIR", str(DATA_DIR.parent / "netcdf")))
+TRACKS_NETCDF = os.environ.get("TRACKS_NETCDF", "tracks.nc")
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "300"))
 
 TRACK_KEYS = {"mission", "glider_version", "time", "lat", "lon", "u", "v"}
 TRACK_PAIR_KEYS = {"time", "lat", "lon"}
 INSTRUMENT_KEYS = {"ctd", "opt", "dox", "ph"}
 COMPRESSION = dict(zlib=True, shuffle=True, complevel=4)
+TRACKS_SCHEMA_VERSION = "gliderapp-tracks-v1"
 
 
 def _json_default(obj):
     if isinstance(obj, Decimal):
         return float(obj)
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
+def _filled(value) -> np.ndarray:
+    return np.asarray(np.ma.filled(value, np.nan), dtype="float64")
 
 
 def atomic_write_json(path: Path, obj: dict) -> None:
@@ -54,6 +60,43 @@ def atomic_write_json(path: Path, obj: dict) -> None:
 def manifest_entry_complete(entry: dict) -> bool:
     store = entry.get("store")
     return bool(store and (NETCDF_DIR / store).exists())
+
+
+def tracks_store_complete(gliders: dict) -> bool:
+    path = NETCDF_DIR / TRACKS_NETCDF
+    if not path.exists():
+        return False
+
+    expected = {
+        str(glider_id): entry.get("source_mtime")
+        for glider_id, entry in gliders.items()
+        if manifest_entry_complete(entry)
+    }
+
+    try:
+        with Dataset(path, "r") as ds:
+            if getattr(ds, "schema_version", "") != TRACKS_SCHEMA_VERSION:
+                return False
+            tracks = ds.groups.get("tracks")
+            if tracks is None:
+                return False
+            found = {}
+            for group in tracks.groups.values():
+                glider_id = str(getattr(group, "glider_id", ""))
+                found[glider_id] = getattr(group, "source_mtime", None)
+    except Exception as e:
+        logger.warning(f"Failed to inspect tracks NetCDF {path}: {e}")
+        return False
+
+    if set(found) != set(expected):
+        return False
+    for glider_id, source_mtime in expected.items():
+        if source_mtime is None:
+            continue
+        found_mtime = found.get(glider_id)
+        if found_mtime is None or abs(float(found_mtime) - float(source_mtime)) >= 0.01:
+            return False
+    return True
 
 
 def load_known_mtimes_from_manifest() -> dict:
@@ -302,10 +345,105 @@ def write_glider_netcdf(web_json_path: Path, netcdf_dir: Path, glider_id: str) -
     return entry
 
 
+def _track_group_name(glider_id: str, used: set[str]) -> str:
+    base = "g_" + "".join(c if c.isalnum() else "_" for c in str(glider_id))
+    name = base
+    i = 2
+    while name in used:
+        name = f"{base}_{i}"
+        i += 1
+    used.add(name)
+    return name
+
+
+def _copy_track_var(dst_group, src_var, name: str, dimensions: tuple[str, ...]) -> None:
+    var = _create_float_var(dst_group, name, dimensions, _filled(src_var[:]))
+    for attr in src_var.ncattrs():
+        try:
+            setattr(var, attr, getattr(src_var, attr))
+        except Exception:
+            pass
+
+
+def write_tracks_netcdf(gliders: dict, netcdf_dir: Path) -> None:
+    """Write duplicated track data for all gliders into one map-friendly NetCDF."""
+    logger.info(f"Writing tracks NetCDF: {TRACKS_NETCDF}")
+    netcdf_dir.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=netcdf_dir, suffix=".tracks.nc.tmp")
+    os.close(fd)
+    tmp_path = Path(tmp)
+    used_group_names: set[str] = set()
+    written = 0
+
+    try:
+        with Dataset(tmp_path, "w", format="NETCDF4") as ds:
+            ds.schema_version = TRACKS_SCHEMA_VERSION
+            ds.created = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+            ds.createDimension("pair", 2)
+            tracks_group = ds.createGroup("tracks")
+
+            for glider_id, entry in sorted(gliders.items()):
+                store = entry.get("store")
+                if not store:
+                    continue
+                store_path = netcdf_dir / store
+                if not store_path.exists():
+                    logger.warning(f"Skipping {glider_id} in tracks NetCDF; missing {store}")
+                    continue
+
+                with Dataset(store_path, "r") as src:
+                    src_track = src.groups.get("track")
+                    if src_track is None:
+                        logger.warning(f"Skipping {glider_id} in tracks NetCDF; no track group")
+                        continue
+
+                    group_name = _track_group_name(str(glider_id), used_group_names)
+                    dst = tracks_group.createGroup(group_name)
+                    dst.createDimension("dive", len(src.dimensions["dive"]))
+                    dst.glider_id = str(glider_id)
+                    dst.mission = str(getattr(src, "mission", glider_id))
+                    dst.glider_version = str(getattr(src, "glider_version", ""))
+                    dst.source_file = str(entry.get("source_file", f"{glider_id}_web.json"))
+                    dst.store = str(store)
+                    if entry.get("source_mtime") is not None:
+                        dst.source_mtime = float(entry["source_mtime"])
+                    if entry.get("source_size") is not None:
+                        dst.source_size = int(entry["source_size"])
+
+                    for key in ("time", "lat", "lon"):
+                        if key in src_track.variables:
+                            _copy_track_var(dst, src_track.variables[key], key, ("dive", "pair"))
+                    for key in ("u", "v"):
+                        if key in src_track.variables:
+                            _copy_track_var(dst, src_track.variables[key], key, ("dive",))
+
+                    src_inst_parent = src.groups.get("instruments")
+                    if src_inst_parent is not None:
+                        dst_inst_parent = dst.createGroup("instruments")
+                        for inst_key, src_inst in src_inst_parent.groups.items():
+                            dst_inst = dst_inst_parent.createGroup(inst_key)
+                            if "info_json" in src_inst.ncattrs():
+                                dst_inst.info_json = getattr(src_inst, "info_json")
+
+                    written += 1
+
+        os.replace(tmp_path, netcdf_dir / TRACKS_NETCDF)
+    except Exception:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+        raise
+
+    logger.info(f"  -> {TRACKS_NETCDF} ({written} gliders)")
+
+
 def build_manifest(gliders: dict) -> dict:
     return {
         "version": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "schema_version": "gliderapp-netcdf-v1",
+        "tracks_store": TRACKS_NETCDF,
+        "tracks_schema_version": TRACKS_SCHEMA_VERSION,
         "gliders": gliders,
     }
 
@@ -350,7 +488,14 @@ def scan_and_convert(known_mtimes: dict) -> dict:
         except Exception as e:
             logger.error(f"Failed to convert {web_path.name}: {e}")
 
-    if updated:
+    tracks_updated = updated or not tracks_store_complete(gliders)
+    if tracks_updated:
+        try:
+            write_tracks_netcdf(gliders, NETCDF_DIR)
+        except Exception as e:
+            logger.error(f"Failed to write tracks NetCDF: {e}")
+
+    if updated or tracks_updated:
         atomic_write_json(manifest_path, build_manifest(gliders))
         logger.info(f"Manifest written: {len(gliders)} gliders")
 
@@ -371,7 +516,8 @@ except OSError:
 def main():
     logger.info(
         f"data-watcher starting. DATA_DIR={DATA_DIR} "
-        f"NETCDF_DIR={NETCDF_DIR} POLL_INTERVAL={POLL_INTERVAL}s"
+        f"NETCDF_DIR={NETCDF_DIR} TRACKS_NETCDF={TRACKS_NETCDF} "
+        f"POLL_INTERVAL={POLL_INTERVAL}s"
     )
     NETCDF_DIR.mkdir(parents=True, exist_ok=True)
 
