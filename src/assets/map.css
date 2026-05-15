@@ -300,6 +300,16 @@
     text-decoration: line-through;
 }
 
+.map-region-auto-switch {
+    margin-bottom: 0;
+    min-height: 0;
+}
+
+.map-region-auto-switch .form-check-label {
+    font-size: 0.85rem;
+    color: #444;
+}
+
 /* ── Archive map legend: long region-grouped mission list ── */
 .archive-map-legend {
     max-width: 22rem;

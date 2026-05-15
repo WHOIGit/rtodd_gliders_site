@@ -218,7 +218,7 @@ def load_map_region_config(config_path, active_regions=None):
         if val.get("default", False):
             default_region = key
         region_options.append({"label": val["label"], "value": key})
-        if key != "auto":
+        if key != "auto" and "center" in val and "zoom" in val:
             region_presets[key] = {
                 "center": {"lat": val["center"]["lat"], "lon": val["center"]["lon"]},
                 "zoom": val["zoom"],

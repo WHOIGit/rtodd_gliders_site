@@ -163,7 +163,10 @@ def _viewport_for_bounds(bounds):
 
 
 def _viewport_for_preset(region_key):
-    preset = REGION_PRESETS.get(region_key, REGION_PRESETS.get("global"))
+    preset = REGION_PRESETS.get(
+        region_key,
+        REGION_PRESETS.get("global", {"center": {"lat": 0, "lon": 0}, "zoom": 1.5}),
+    )
     return {
         "center": [preset["center"]["lat"], preset["center"]["lon"]],
         "zoom": preset["zoom"],

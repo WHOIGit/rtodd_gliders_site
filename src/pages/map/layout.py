@@ -7,20 +7,20 @@ import dash_bootstrap_components as dbc
 import dash_leaflet as dl
 
 from .names import *
-from utils import load_map_region_config
+from utils import load_region_labels
 from data_loader import DEFAULT_DATA_DIR, GliderDataLoader
 
 _gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=False)
 _active_regions = {m["region"] for m in _gdl.active_meta.values()}
-_default_region, _region_options, _region_presets, _ = load_map_region_config(
-    Path("config/map_config.yml").resolve(),
-    active_regions=_active_regions,
-)
+_region_labels = load_region_labels(Path("config/map_config.yml").resolve())
+_default_region = "all"
+_region_options = [{"label": "Show All", "value": _default_region}] + [
+    {"label": _region_labels.get(region, region), "value": region}
+    for region in sorted(_active_regions, key=lambda r: _region_labels.get(r, r))
+]
 
-# Initial center/zoom from the default region preset
-_init_preset = _region_presets.get(_default_region, {"center": {"lat": 35.0, "lon": -65.0}, "zoom": 4})
-_init_center = [_init_preset["center"]["lat"], _init_preset["center"]["lon"]]
-_init_zoom = _init_preset["zoom"]
+_init_center = [35.0, -65.0]
+_init_zoom = 4
 
 app = dash.get_app()
 
@@ -43,13 +43,13 @@ def intro_div():
 def options_div():
     btn_grp = dbc.ButtonGroup(
         [
-            dbc.Button("Day", id=ControlIds.TIME_BTN_DAY, size="sm", outline=True, color="secondary"),
-            dbc.Button("Week", id=ControlIds.TIME_BTN_WEEK, size="sm", outline=True, color="secondary"),
-            dbc.Button("Month", id=ControlIds.TIME_BTN_MONTH, size="sm", outline=True, color="secondary"),
-            dbc.Button("All", id=ControlIds.TIME_BTN_ALL, size="sm", outline=True, color="secondary"),
-            dbc.Button("Custom", id=ControlIds.TIME_BTN_X, size="sm", outline=True, color="secondary"),
+            dbc.Button("Day", id=ControlIds.TIME_BTN_DAY, size="sm", outline=True, color="secondary", className="flex-fill"),
+            dbc.Button("Week", id=ControlIds.TIME_BTN_WEEK, size="sm", outline=True, color="secondary", className="flex-fill"),
+            dbc.Button("Month", id=ControlIds.TIME_BTN_MONTH, size="sm", outline=True, color="secondary", className="flex-fill"),
+            dbc.Button("All", id=ControlIds.TIME_BTN_ALL, size="sm", outline=True, color="secondary", className="flex-fill"),
         ],
         size="sm",
+        className="w-100 d-flex",
     )
 
     custom_picker = html.Div(
@@ -92,7 +92,7 @@ def options_div():
                 tooltip={"placement": "bottom", "always_visible": False},
             ),
         ],
-        className="mt-3",
+        className="mt-3 mb-2",
     )
 
     region_select = html.Div(
@@ -118,11 +118,22 @@ def options_div():
             custom_picker,  # hidden
 
             html.Hr(className="my-3"),
-            uv_scale,
+            html.Div(
+                [
+                    html.Div("Region", className="fw-semibold"),
+                    dbc.Switch(
+                        id=ControlIds.REGION_AUTO_ZOOM,
+                        label="Auto",
+                        value=True,
+                        className="map-region-auto-switch",
+                    ),
+                ],
+                className="d-flex align-items-center justify-content-between mb-1",
+            ),
+            region_select,
 
             html.Hr(className="my-3"),
-            html.Div("Region", className="fw-semibold mb-1"),
-            region_select,
+            uv_scale,
         ])
 
 

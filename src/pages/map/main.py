@@ -116,13 +116,12 @@ def _truncate_to_day_start(epoch: int) -> int:
     Input(ControlIds.TIME_BTN_WEEK, "n_clicks"),
     Input(ControlIds.TIME_BTN_MONTH, "n_clicks"),
     Input(ControlIds.TIME_BTN_ALL, "n_clicks"),
-    Input(ControlIds.TIME_BTN_X, "n_clicks"),
     Input(ControlIds.TIME_RANGE_PICKER, "start_date"),
     Input(ControlIds.TIME_RANGE_PICKER, "end_date"),
     prevent_initial_call=True,
 )
 def update_timerange_store(
-    day, week, month, all_, custom_btn,
+    day, week, month, all_,
     start_date, end_date,
 ):
     trig = dash.ctx.triggered_id
@@ -141,19 +140,12 @@ def update_timerange_store(
         start = _truncate_to_day_start(now - 30 * 24 * 3600)
         return [start, None], trig
 
-    elif trig == ControlIds.TIME_BTN_X:
-        if not start_date:
-            return no_update, ControlIds.TIME_BTN_X
-        start = _date_to_epoch_start(start_date)
-        end = _date_to_epoch_end(end_date) if end_date else now
-        return [start, end], trig
-
     elif trig == ControlIds.TIME_RANGE_PICKER:
         if not start_date:
             return no_update, no_update
         start = _date_to_epoch_start(start_date)
         end = _date_to_epoch_end(end_date) if end_date else now
-        return [start, end], ControlIds.TIME_BTN_X
+        return [start, end], no_update
 
     else: # trig == ControlIds.TIME_BTN_ALL
         return None, trig
@@ -165,7 +157,6 @@ def update_timerange_store(
     Output(ControlIds.TIME_BTN_WEEK, "outline"),
     Output(ControlIds.TIME_BTN_MONTH, "outline"),
     Output(ControlIds.TIME_BTN_ALL, "outline"),
-    Output(ControlIds.TIME_BTN_X, "outline"),
     Input(StoreIds.TIMEBTN_ACTIVE_STORE, "data"),
 )
 def set_active_time_button(active_btn_id):
@@ -177,7 +168,6 @@ def set_active_time_button(active_btn_id):
         inactive(ControlIds.TIME_BTN_WEEK),
         inactive(ControlIds.TIME_BTN_MONTH),
         inactive(ControlIds.TIME_BTN_ALL),
-        inactive(ControlIds.TIME_BTN_X),
     )
 
 
@@ -214,13 +204,18 @@ def rgb_to_hex(r:int, g:int, b:int, a=None):
 def _load_region_config():
     gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=False)
     active_regions = {m["region"] for m in gdl.active_meta.values()}
-    return load_map_region_config(
+    _, _, _, glider_image_url = load_map_region_config(
         Path("config/map_config.yml").resolve(),
         active_regions=active_regions,
     )
+    region_options = [{"label": "Show All", "value": "all"}] + [
+        {"label": _region_display(region), "value": region}
+        for region in sorted(active_regions, key=_region_display)
+    ]
+    return "all", region_options, glider_image_url
 
 
-_default_region, _region_options, REGION_PRESETS, _GLIDER_IMAGE_URL = _load_region_config()
+_default_region, _region_options, _GLIDER_IMAGE_URL = _load_region_config()
 
 GLIDER_ICON = dict(
     iconUrl=_GLIDER_IMAGE_URL or "SprayGliderTail.png",
@@ -229,7 +224,7 @@ GLIDER_ICON = dict(
 )
 
 
-def _build_map_children(latlon_records, uv_records, time_range, uv_scale, region_key, hidden=None):
+def _build_map_children(latlon_records, uv_records, time_range, uv_scale, hidden=None):
     """Build dash-leaflet children, bounds, and legend for the map.
 
     Returns (children, bounds, legend_items, per_glider_bounds) where:
@@ -405,14 +400,27 @@ def _viewport_for_bounds(bounds):
     return {"bounds": bounds, "transition": "fitBounds"}
 
 
-def _viewport_for_preset(region_key):
-    """Create a viewport dict for a named region preset."""
-    preset = REGION_PRESETS.get(region_key, REGION_PRESETS["global"])
-    return {
-        "center": [preset["center"]["lat"], preset["center"]["lon"]],
-        "zoom": preset["zoom"],
-        "transition": "flyTo",
-    }
+def _merge_bounds(bounds_list):
+    bounds_list = [b for b in bounds_list if b]
+    if not bounds_list:
+        return None
+    return [
+        [min(b[0][0] for b in bounds_list), min(b[0][1] for b in bounds_list)],
+        [max(b[1][0] for b in bounds_list), max(b[1][1] for b in bounds_list)],
+    ]
+
+
+def _bounds_for_region_selection(region_key, gbounds, region_by_glider, hidden):
+    hidden_set = set(hidden or [])
+    gbounds = gbounds or {}
+    if region_key == "all":
+        sns = [sn for sn in gbounds if str(sn) not in hidden_set]
+    else:
+        sns = [
+            sn for sn, region in (region_by_glider or {}).items()
+            if region == region_key and sn in gbounds and str(sn) not in hidden_set
+        ]
+    return _merge_bounds(gbounds.get(sn) for sn in sns)
 
 
 @app.callback(
@@ -426,35 +434,44 @@ def _viewport_for_preset(region_key):
     Input(StoreIds.TIMERANGE_STORE, "data"),
     Input(ControlIds.UV_SCALE, "value"),
     Input(StoreIds.REGION_ACTIVE_STORE, "data"),
+    Input(ControlIds.REGION_AUTO_ZOOM, "value"),
     Input(StoreIds.LEGEND_HIDDEN_STORE, "data"),
     State(IntervalIds.DATA_REFRESH, "n_intervals"),
     prevent_initial_call=False,
 )
-def update_map(store_data, time_range, uv_scale, region_store, hidden, n_intervals):
+def update_map(store_data, time_range, uv_scale, region_store, auto_zoom, hidden, n_intervals):
     region_key = (region_store or {}).get("region", _default_region)
+    trigger = dash.ctx.triggered_id
     is_visibility_toggle = dash.ctx.triggered_id == StoreIds.LEGEND_HIDDEN_STORE
     is_interval_refresh = (
-        dash.ctx.triggered_id == ControlIds.UV_SCALE
+        trigger == ControlIds.UV_SCALE
         or is_visibility_toggle
         or (
-            dash.ctx.triggered_id == StoreIds.MAPDATA_STORE
+            trigger == StoreIds.MAPDATA_STORE
             and n_intervals is not None
             and n_intervals > 0
+        )
+    )
+    should_update_viewport = (
+        trigger in (None, StoreIds.REGION_ACTIVE_STORE)
+        or (
+            bool(auto_zoom)
+            and trigger in (StoreIds.MAPDATA_STORE, StoreIds.TIMERANGE_STORE, StoreIds.LEGEND_HIDDEN_STORE)
         )
     )
     store_data = store_data or {}
     latlon_records = store_data.get("latlon_records", {})
     uv_records = store_data.get("uv_records", {})
+    region_by_glider = store_data.get("region_by_glider", {})
 
     tile = dl.TileLayer(url=TILE_URL)
     zoom_ctrl = dl.ZoomControl(position="bottomright")
 
     if not latlon_records:
-        vp = _viewport_for_preset(region_key) if region_key != 'auto' else no_update
-        return [tile, zoom_ctrl], vp, False, "", [], {}
+        return [tile, zoom_ctrl], no_update, False, "", [], {}
 
     data_children, bounds, legend_items, gbounds = _build_map_children(
-        latlon_records, uv_records, time_range, uv_scale, region_key, hidden=hidden
+        latlon_records, uv_records, time_range, uv_scale, hidden=hidden
     )
 
     if not data_children:
@@ -471,33 +488,32 @@ def update_map(store_data, time_range, uv_scale, region_store, hidden, n_interva
             )
             shifted_range = [last_ts - window, last_ts]
             data_children, bounds, legend_items, gbounds = _build_map_children(
-                latlon_records, uv_records, shifted_range, uv_scale, region_key, hidden=hidden
+                latlon_records, uv_records, shifted_range, uv_scale, hidden=hidden
             )
             if data_children:
                 last_dt = dt.datetime.utcfromtimestamp(last_ts).strftime("%Y-%m-%d")
                 all_children = [tile, zoom_ctrl] + data_children
-                vp = _viewport_for_bounds(bounds) if region_key == 'auto' else _viewport_for_preset(region_key)
-                if is_visibility_toggle:
+                selected_bounds = _bounds_for_region_selection(region_key, gbounds, region_by_glider, hidden)
+                vp = _viewport_for_bounds(selected_bounds) if selected_bounds else no_update
+                if not should_update_viewport:
                     vp = no_update
                 return (all_children, vp, True,
                     f"No data found for the selected time range. Showing the same time window ending at the last available data ({last_dt}).",
                     _legend_children(legend_items), gbounds)
 
-        vp = no_update if is_visibility_toggle else (
-            _viewport_for_preset(region_key) if region_key != 'auto' else no_update
-        )
+        selected_bounds = _bounds_for_region_selection(region_key, gbounds, region_by_glider, hidden)
+        vp = no_update if not should_update_viewport or not selected_bounds else _viewport_for_bounds(selected_bounds)
         return [tile, zoom_ctrl], vp, False, "", _legend_children(legend_items), gbounds
 
     all_children = [tile, zoom_ctrl] + data_children
     legend = _legend_children(legend_items)
+    selected_bounds = _bounds_for_region_selection(region_key, gbounds, region_by_glider, hidden)
 
     if is_visibility_toggle:
-        return all_children, no_update, False, "", legend, gbounds
-    if region_key == 'auto':
-        vp = no_update if is_interval_refresh else _viewport_for_bounds(bounds)
+        vp = _viewport_for_bounds(selected_bounds) if should_update_viewport and selected_bounds else no_update
         return all_children, vp, False, "", legend, gbounds
-    else:
-        return all_children, _viewport_for_preset(region_key), False, "", legend, gbounds
+    vp = no_update if not should_update_viewport or is_interval_refresh or not selected_bounds else _viewport_for_bounds(selected_bounds)
+    return all_children, vp, False, "", legend, gbounds
 
 
 def _legend_children(legend_items):
@@ -618,6 +634,11 @@ def load_mapdata_from_source():
     return {
         "latlon_records": latlon_records,
         "uv_records": uv_records,
+        "region_by_glider": {
+            sn: meta.get("region", "")
+            for sn, meta in gdl.active_meta.items()
+            if sn in latlon_records
+        },
         "data_mtime": gdl.latest_filemodified_timestamp(),
     }
 
@@ -648,28 +669,6 @@ def refresh_mapdata_on_interval(n_intervals, current_store):
     if current_store and current_store.get("data_mtime") == new_data.get("data_mtime"):
         return no_update
     return new_data
-
-
-@app.callback(
-    Output(ContainerIds.HIDDEN_CUSTOMTIME_CONTAINER, "style"),
-    Input(ControlIds.TIME_BTN_X, "n_clicks"),
-    Input(ControlIds.TIME_BTN_DAY, "n_clicks"),
-    Input(ControlIds.TIME_BTN_WEEK, "n_clicks"),
-    Input(ControlIds.TIME_BTN_MONTH, "n_clicks"),
-    Input(ControlIds.TIME_BTN_ALL, "n_clicks"),
-    prevent_initial_call=True,
-)
-def toggle_custom_time_picker(
-    n_custom, n_day, n_week, n_month, n_all
-):
-    trigger = dash.ctx.triggered_id
-
-    if trigger == ControlIds.TIME_BTN_X:
-        # show date picker
-        return {"display": "block"}
-
-    # any other button hides it
-    return {"display": "none"}
 
 
 @app.callback(

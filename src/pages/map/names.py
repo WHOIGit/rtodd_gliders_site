@@ -20,6 +20,7 @@ class ControlIds:
     GLIDER_CHECKLIST = "glider-checklist"
     TIME_RANGE_PICKER = "time-range-picker"
     UV_SCALE = "uv-scale-factor"
+    REGION_AUTO_ZOOM = "region-auto-zoom"
     REGION_SELECT = "region-select"
     GLIDER_SELECT = "glider-select"
     SECTION_SELECT = "section-select"

@@ -1,96 +1,32 @@
 glider_image: "glider-icon.png"
 
 regions:
-  auto:
-    label: "Auto"
-    enable: true
-    default: true
-
-  global:
-    label: "Global"
-    enable: true
-    center:
-      lat: 0
-      lon: 0
-    zoom: 1.5
-
   gulfstream:
     label: "Gulf Stream"
-    enable: if-has-gliders
-    center:
-      lat: 35.0
-      lon: -65.0
-    zoom: 6
 
   california:
     label: "California"
-    enable: if-has-gliders
-    center:
-      lat: 36.5
-      lon: -122.5
-    zoom: 6
 
   gulfofmaine:
     label: "Gulf of Maine"
-    enable: if-has-gliders
-    center:
-      lat: 43.0
-      lon: -68.5
-    zoom: 7
 
   gulfofmexico:
     label: "Gulf of Mexico"
-    enable: if-has-gliders
-    center:
-      lat: 25.0
-      lon: -89.0
-    zoom: 6
 
   midatlantic:
     label: "Mid-Atlantic"
-    enable: if-has-gliders
-    center:
-      lat: 38.0
-      lon: -73.0
-    zoom: 6
 
   hatteras:
     label: "Hatteras"
-    enable: if-has-gliders
-    center:
-      lat: 35.0
-      lon: -74.5
-    zoom: 7
 
   indian:
     label: "Indian Ocean"
-    enable: if-has-gliders
-    center:
-      lat: -10.0
-      lon: 75.0
-    zoom: 4
 
   bayofbengal:
     label: "Bay of Bengal"
-    enable: if-has-gliders
-    center:
-      lat: 14.0
-      lon: 88.0
-    zoom: 5
 
   galapagos:
     label: "Galapagos"
-    enable: if-has-gliders
-    center:
-      lat: -0.5
-      lon: -91.0
-    zoom: 6
 
   iceland:
     label: "Iceland"
-    enable: if-has-gliders
-    center:
-      lat: 64.5
-      lon: -22.0
-    zoom: 5
-
