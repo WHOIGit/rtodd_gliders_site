@@ -367,9 +367,21 @@ def _icon_button(icon_class, button_id, title, class_name="map-legend-eye", disa
     )
 
 
-def _legend_children(region_items):
+def _legend_id(scope, kind, index=None):
+    out = {"type": f"archive-legend-{kind}", "scope": scope}
+    if index is not None:
+        out["index"] = index
+    return out
+
+
+def _open_key(scope, region):
+    return f"{scope}:{region}"
+
+
+def _legend_children(region_items, scope="desktop", open_regions=None):
     if not region_items:
         return []
+    open_set = set(open_regions or [])
 
     all_available = [
         item
@@ -396,21 +408,21 @@ def _legend_children(region_items):
                         html.Span(region["region_label"], className="map-legend-region-title"),
                         html.Span(count_label, className="map-legend-region-count"),
                     ],
-                    id={"type": "archive-legend-region-toggle", "index": region["region"]},
+                    id=_legend_id(scope, "region-toggle", region["region"]),
                     className="archive-map-legend-region-toggle",
                     n_clicks=0,
                     title=f"Expand {region['region_label']}",
                 ),
                 _icon_button(
                     "bi-search",
-                    {"type": "archive-legend-region-zoom", "index": region["region"]},
+                    _legend_id(scope, "region-zoom", region["region"]),
                     f"Zoom to {region['region_label']}",
                     class_name="map-legend-eye archive-legend-zoom",
                     disabled=not bool(available),
                 ),
                 _icon_button(
                     region_icon,
-                    {"type": "archive-legend-region-eye", "index": region["region"]},
+                    _legend_id(scope, "region-eye", region["region"]),
                     "Hide region" if region_visible else "Show region",
                     disabled=not bool(available),
                 ),
@@ -449,7 +461,7 @@ def _legend_children(region_items):
                                     className="archive-legend-label-block",
                                 ),
                             ],
-                            id={"type": "archive-legend-item", "index": str(item["mission_id"])},
+                            id=_legend_id(scope, "item", str(item["mission_id"])),
                             className="map-legend-item",
                             n_clicks=0,
                             disabled=not item["available"],
@@ -457,7 +469,7 @@ def _legend_children(region_items):
                         ),
                         _icon_button(
                             eye_icon,
-                            {"type": "archive-legend-eye", "index": str(item["mission_id"])},
+                            _legend_id(scope, "eye", str(item["mission_id"])),
                             "Hide" if not item["hidden"] else "Show",
                             disabled=not item["available"],
                         ),
@@ -472,8 +484,8 @@ def _legend_children(region_items):
                     header,
                     dbc.Collapse(
                         html.Div(rows, className="map-legend-list archive-map-legend-list"),
-                        id={"type": "archive-legend-region-collapse", "index": region["region"]},
-                        is_open=False,
+                        id=_legend_id(scope, "region-collapse", region["region"]),
+                        is_open=_open_key(scope, region["region"]) in open_set,
                     ),
                 ],
                 className="archive-map-legend-region",
@@ -487,14 +499,14 @@ def _legend_children(region_items):
                     html.Span("Archive Missions", className="map-legend-title"),
                     _icon_button(
                         "bi-search",
-                        "archive-map-legend-master-zoom",
+                        _legend_id(scope, "master-zoom"),
                         "Zoom to all archive tracks",
                         class_name="map-legend-eye map-legend-eye-master archive-legend-zoom",
                         disabled=not bool(all_available),
                     ),
                     _icon_button(
                         master_icon,
-                        "archive-map-legend-master-eye",
+                        _legend_id(scope, "master-eye"),
                         "Hide all" if any_visible else "Show all",
                         class_name="map-legend-eye map-legend-eye-master",
                         disabled=not bool(all_available),
@@ -504,7 +516,7 @@ def _legend_children(region_items):
             ),
             html.Div(
                 region_sections,
-                id="archive-map-legend-accordion",
+                id=f"archive-map-legend-accordion-{scope}",
                 className="archive-map-legend-accordion",
             ),
         ],
@@ -514,9 +526,9 @@ def _legend_children(region_items):
 
 
 @app.callback(
-    Output({"type": "archive-legend-region-collapse", "index": ALL}, "is_open"),
-    Input({"type": "archive-legend-region-toggle", "index": ALL}, "n_clicks"),
-    State({"type": "archive-legend-region-collapse", "index": ALL}, "is_open"),
+    Output({"type": "archive-legend-region-collapse", "scope": ALL, "index": ALL}, "is_open"),
+    Input({"type": "archive-legend-region-toggle", "scope": ALL, "index": ALL}, "n_clicks"),
+    State({"type": "archive-legend-region-collapse", "scope": ALL, "index": ALL}, "is_open"),
     prevent_initial_call=True,
 )
 def toggle_legend_region(_clicks, is_open):
@@ -528,9 +540,31 @@ def toggle_legend_region(_clicks, is_open):
         raise PreventUpdate
     ids = [entry["id"] for entry in dash.ctx.outputs_list]
     return [
-        (not open_state) if out_id["index"] == trig["index"] else open_state
+        (not open_state) if out_id["scope"] == trig["scope"] and out_id["index"] == trig["index"] else open_state
         for out_id, open_state in zip(ids, is_open)
     ]
+
+
+@app.callback(
+    Output(StoreIds.LEGEND_OPEN_STORE, "data"),
+    Input({"type": "archive-legend-region-toggle", "scope": ALL, "index": ALL}, "n_clicks"),
+    State(StoreIds.LEGEND_OPEN_STORE, "data"),
+    prevent_initial_call=True,
+)
+def store_open_legend_regions(_clicks, open_regions):
+    trig = dash.ctx.triggered_id
+    if not trig:
+        raise PreventUpdate
+    triggered_prop = dash.ctx.triggered[0]
+    if not triggered_prop.get("value"):
+        raise PreventUpdate
+    open_set = set(open_regions or [])
+    key = _open_key(trig["scope"], trig["index"])
+    if key in open_set:
+        open_set.remove(key)
+    else:
+        open_set.add(key)
+    return sorted(open_set)
 
 
 @app.callback(
@@ -601,39 +635,42 @@ def update_yearrange_store(year_range):
     Output(MapIds.MAP, "children"),
     Output(MapIds.MAP, "viewport"),
     Output(ContainerIds.MAP_LEGEND, "children"),
+    Output(ContainerIds.MAP_LEGEND_MOBILE, "children"),
     Output(StoreIds.LEGEND_BOUNDS_STORE, "data"),
     Input(StoreIds.MAPDATA_STORE, "data"),
     Input(StoreIds.YEARRANGE_STORE, "data"),
     Input(StoreIds.LEGEND_HIDDEN_STORE, "data"),
+    State(StoreIds.LEGEND_OPEN_STORE, "data"),
     prevent_initial_call=False,
 )
-def update_map(store_data, year_range, hidden):
+def update_map(store_data, year_range, hidden, open_regions):
     store_data = store_data or {}
     missions = store_data.get("missions", {})
     tile = dl.TileLayer(url=TILE_URL)
     zoom_ctrl = dl.ZoomControl(position="bottomright")
 
     if not missions:
-        return [tile, zoom_ctrl], _viewport_for_default(), [], {}
+        return [tile, zoom_ctrl], _viewport_for_default(), [], [], {}
 
     data_children, bounds, region_items, gbounds = _build_map_children(missions, year_range, hidden=hidden)
     if not data_children:
         data_children = [dl.LayerGroup(id="archive-map-loaded-placeholder")]
     all_children = [tile, zoom_ctrl] + data_children
-    legend = _legend_children(region_items)
+    desktop_legend = _legend_children(region_items, scope="desktop", open_regions=open_regions)
+    mobile_legend = _legend_children(region_items, scope="mobile", open_regions=open_regions)
 
     if dash.ctx.triggered_id == StoreIds.LEGEND_HIDDEN_STORE:
-        return all_children, no_update, legend, gbounds
+        return all_children, no_update, desktop_legend, mobile_legend, gbounds
     if bounds:
-        return all_children, _viewport_for_bounds(bounds), legend, gbounds
-    return all_children, _viewport_for_default(), legend, gbounds
+        return all_children, _viewport_for_bounds(bounds), desktop_legend, mobile_legend, gbounds
+    return all_children, _viewport_for_default(), desktop_legend, mobile_legend, gbounds
 
 
 @app.callback(
     Output(StoreIds.LEGEND_HIDDEN_STORE, "data"),
-    Input({"type": "archive-legend-eye", "index": ALL}, "n_clicks"),
-    Input({"type": "archive-legend-region-eye", "index": ALL}, "n_clicks"),
-    Input("archive-map-legend-master-eye", "n_clicks"),
+    Input({"type": "archive-legend-eye", "scope": ALL, "index": ALL}, "n_clicks"),
+    Input({"type": "archive-legend-region-eye", "scope": ALL, "index": ALL}, "n_clicks"),
+    Input({"type": "archive-legend-master-eye", "scope": ALL}, "n_clicks"),
     State(StoreIds.LEGEND_HIDDEN_STORE, "data"),
     State(StoreIds.LEGEND_BOUNDS_STORE, "data"),
     prevent_initial_call=True,
@@ -649,7 +686,7 @@ def toggle_legend_visibility(_eye_clicks, _region_clicks, _master_clicks, hidden
     hidden_set = set(hidden or [])
     gbounds = gbounds or {}
 
-    if trig == "archive-map-legend-master-eye":
+    if trig["type"] == "archive-legend-master-eye":
         all_missions = set(map(str, (gbounds.get("missions") or {}).keys()))
         any_visible = bool(all_missions - hidden_set)
         return sorted(all_missions) if any_visible else []
@@ -674,9 +711,9 @@ def toggle_legend_visibility(_eye_clicks, _region_clicks, _master_clicks, hidden
 
 @app.callback(
     Output(MapIds.MAP, "viewport", allow_duplicate=True),
-    Input({"type": "archive-legend-item", "index": ALL}, "n_clicks"),
-    Input({"type": "archive-legend-region-zoom", "index": ALL}, "n_clicks"),
-    Input("archive-map-legend-master-zoom", "n_clicks"),
+    Input({"type": "archive-legend-item", "scope": ALL, "index": ALL}, "n_clicks"),
+    Input({"type": "archive-legend-region-zoom", "scope": ALL, "index": ALL}, "n_clicks"),
+    Input({"type": "archive-legend-master-zoom", "scope": ALL}, "n_clicks"),
     State(StoreIds.LEGEND_BOUNDS_STORE, "data"),
     prevent_initial_call=True,
 )
@@ -688,7 +725,7 @@ def zoom_to_legend(_mission_clicks, _region_clicks, _master_clicks, gbounds):
     if not triggered_prop.get("value"):
         raise PreventUpdate
 
-    if trig == "archive-map-legend-master-zoom":
+    if trig["type"] == "archive-legend-master-zoom":
         bounds = gbounds.get("all")
     elif trig["type"] == "archive-legend-region-zoom":
         bounds = (gbounds.get("regions") or {}).get(trig["index"])

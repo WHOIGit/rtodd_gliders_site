@@ -114,6 +114,12 @@ def float_box():
         [
             dbc.AccordionItem(options_div(), title="Year Range"),
             dbc.AccordionItem(section_details_div(), title="Section Details", item_id=ContainerIds.SECTION_DETAILS),
+            dbc.AccordionItem(
+                html.Div(id=ContainerIds.MAP_LEGEND_MOBILE, className="archive-map-legend archive-map-legend-mobile"),
+                title="Legend",
+                item_id=ContainerIds.MOBILE_LEGEND,
+                className="archive-mobile-legend-item",
+            ),
         ],
         id=ContainerIds.MAP_ACCORDION,
         flush=True,
@@ -182,6 +188,7 @@ def main_layout():
             dcc.Store(id=StoreIds.YEARRANGE_STORE, storage_type="memory", data=[_min_year, _max_year]),
             dcc.Store(id=StoreIds.LEGEND_BOUNDS_STORE, storage_type="memory", data={}),
             dcc.Store(id=StoreIds.LEGEND_HIDDEN_STORE, storage_type="memory", data=[]),
+            dcc.Store(id=StoreIds.LEGEND_OPEN_STORE, storage_type="memory", data=[]),
             dcc.Interval(id=IntervalIds.DATA_REFRESH, interval=30 * 60 * 1000, n_intervals=0),
             dcc.Store(id=MapIds.CLICK_STORE, data=None),
             map_div,

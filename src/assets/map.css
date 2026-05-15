@@ -318,6 +318,15 @@
     overflow-y: auto;
 }
 
+.archive-mobile-legend-item {
+    display: none;
+}
+
+.archive-map-legend-mobile {
+    max-height: 46vh;
+    overflow-y: auto;
+}
+
 .archive-map-legend .map-legend-header {
     position: sticky;
     top: -0.5rem;
@@ -451,8 +460,27 @@
 
 @media (max-width: 576px) {
     .archive-map-legend {
-        right: 0.5rem;
-        max-height: 42%;
-        width: min(20rem, calc(100vw - 1rem));
+        display: none;
+    }
+
+    .archive-mobile-legend-item {
+        display: block;
+    }
+
+    .archive-map-legend-mobile {
+        display: block;
+        position: static;
+        width: 100%;
+        max-width: none;
+        max-height: none;
+        overflow: visible;
+        padding: 0;
+        border: none;
+        box-shadow: none;
+        background: transparent;
+    }
+
+    .archive-map-legend-mobile .map-legend-header {
+        top: 0;
     }
 }

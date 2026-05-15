@@ -11,6 +11,7 @@ class StoreIds:
     YEARRANGE_STORE = PREFIX + "year-range-store"
     LEGEND_BOUNDS_STORE = PREFIX + "legend-bounds-store"
     LEGEND_HIDDEN_STORE = PREFIX + "legend-hidden-store"
+    LEGEND_OPEN_STORE = PREFIX + "legend-open-store"
 
 
 class ControlIds:
@@ -24,8 +25,10 @@ class ContainerIds:
     MAP_OVERLAY = PREFIX + "map-overlay"
     MAP_OVERLAY_TOGGLE = PREFIX + "map-overlay-toggle"
     SECTION_DETAILS = PREFIX + "accordion-section-details"
+    MOBILE_LEGEND = PREFIX + "accordion-mobile-legend"
     MAP_LOADING_OVERLAY = PREFIX + "map-loading-overlay"
     MAP_LEGEND = PREFIX + "map-legend"
+    MAP_LEGEND_MOBILE = PREFIX + "map-legend-mobile"
 
 
 class TextIds:
