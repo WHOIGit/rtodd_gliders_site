@@ -1,5 +1,4 @@
 import datetime as dt
-from pathlib import Path
 
 import dash
 from dash import html, dcc
@@ -7,19 +6,12 @@ import dash_bootstrap_components as dbc
 import dash_leaflet as dl
 
 from data_loader import DEFAULT_DATA_DIR, GliderDataLoader
-from utils import load_map_region_config
 from .names import ControlIds, StoreIds, MapIds, ContainerIds, TextIds, IntervalIds
 
 
 _gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=False)
-_archive_regions = {m["region"] for m in _gdl.archive_missions.values()}
-_default_region, _region_options, _region_presets, _ = load_map_region_config(
-    Path("config/map_config.yml").resolve(),
-    active_regions=_archive_regions,
-)
-_init_preset = _region_presets.get("global", {"center": {"lat": 0, "lon": 0}, "zoom": 1.5})
-_init_center = [_init_preset["center"]["lat"], _init_preset["center"]["lon"]]
-_init_zoom = _init_preset["zoom"]
+_init_center = [38.5, -73.5]
+_init_zoom = 5
 
 app = dash.get_app()
 

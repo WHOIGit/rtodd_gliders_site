@@ -204,7 +204,7 @@ def rgb_to_hex(r:int, g:int, b:int, a=None):
 def _load_region_config():
     gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=False)
     active_regions = {m["region"] for m in gdl.active_meta.values()}
-    _, _, _, glider_image_url = load_map_region_config(
+    _, _, glider_image_url = load_map_region_config(
         Path("config/map_config.yml").resolve(),
         active_regions=active_regions,
     )

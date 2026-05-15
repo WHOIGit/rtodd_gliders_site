@@ -71,13 +71,14 @@ COLOR_CYCLE = [
 def _load_region_config():
     gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=False)
     archive_regions = {m["region"] for m in gdl.archive_missions.values()}
-    return load_map_region_config(
+    _, _, glider_image_url = load_map_region_config(
         Path("config/map_config.yml").resolve(),
         active_regions=archive_regions,
     )
+    return glider_image_url
 
 
-_default_region, _region_options, REGION_PRESETS, _GLIDER_IMAGE_URL = _load_region_config()
+_GLIDER_IMAGE_URL = _load_region_config()
 
 GLIDER_ICON = dict(
     iconUrl=_GLIDER_IMAGE_URL or "SprayGliderTail.png",
@@ -162,14 +163,10 @@ def _viewport_for_bounds(bounds):
     return {"bounds": bounds, "transition": "fitBounds"}
 
 
-def _viewport_for_preset(region_key):
-    preset = REGION_PRESETS.get(
-        region_key,
-        REGION_PRESETS.get("global", {"center": {"lat": 0, "lon": 0}, "zoom": 1.5}),
-    )
+def _viewport_for_default():
     return {
-        "center": [preset["center"]["lat"], preset["center"]["lon"]],
-        "zoom": preset["zoom"],
+        "center": [38.5, -73.5],
+        "zoom": 5,
         "transition": "flyTo",
     }
 
@@ -613,7 +610,7 @@ def update_map(store_data, year_range, hidden):
     zoom_ctrl = dl.ZoomControl(position="bottomright")
 
     if not missions:
-        return [tile, zoom_ctrl], _viewport_for_preset("global"), [], {}
+        return [tile, zoom_ctrl], _viewport_for_default(), [], {}
 
     data_children, bounds, region_items, gbounds = _build_map_children(missions, year_range, hidden=hidden)
     if not data_children:
@@ -625,7 +622,7 @@ def update_map(store_data, year_range, hidden):
         return all_children, no_update, legend, gbounds
     if bounds:
         return all_children, _viewport_for_bounds(bounds), legend, gbounds
-    return all_children, _viewport_for_preset("global"), legend, gbounds
+    return all_children, _viewport_for_default(), legend, gbounds
 
 
 @app.callback(

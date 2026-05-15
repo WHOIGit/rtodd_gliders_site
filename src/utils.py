@@ -155,11 +155,10 @@ def load_map_region_config(config_path, active_regions=None):
     """
     Load map config from a YAML file (map_config.yml).
 
-    Each region has an `enable` field:
-      - true: include
+    Each region may have an `enable` field:
+      - true or missing: include
       - false: skip
       - "if-has-gliders": include only if region_key is in active_regions
-        (not honored for auto/global — those are always included)
 
     Args:
         config_path: path to map_config.yml
@@ -168,7 +167,6 @@ def load_map_region_config(config_path, active_regions=None):
     Returns:
         default_region (str): key of the default selected region
         region_options (list[dict]): RadioItems-compatible options (enabled only)
-        region_presets (dict): key -> {center, zoom} for non-auto regions
         glider_image_url (str|None): URL to serve the glider marker image
     """
     import yaml
@@ -188,18 +186,10 @@ def load_map_region_config(config_path, active_regions=None):
     active_regions = set(active_regions or [])
     default_region = None
     region_options = []
-    region_presets = {}
 
     for key, val in cfg.get("regions", {}).items():
         enable = val.get("enable", True)
-        if key in ("auto", "global"):
-            if enable != True:
-                import logging
-                logging.getLogger(__name__).warning(
-                    f"region {key!r} has enable={enable!r}; forcing enabled"
-                )
-            include = True
-        elif enable is True:
+        if enable is True:
             include = True
         elif enable is False:
             include = False
@@ -218,16 +208,11 @@ def load_map_region_config(config_path, active_regions=None):
         if val.get("default", False):
             default_region = key
         region_options.append({"label": val["label"], "value": key})
-        if key != "auto" and "center" in val and "zoom" in val:
-            region_presets[key] = {
-                "center": {"lat": val["center"]["lat"], "lon": val["center"]["lon"]},
-                "zoom": val["zoom"],
-            }
 
     if default_region is None:
-        default_region = "auto"
+        default_region = region_options[0]["value"] if region_options else None
 
-    return default_region, region_options, region_presets, glider_image_url
+    return default_region, region_options, glider_image_url
 
 
 def latlon_offset(lat, lon, v_dy, u_dx, scale=1):
