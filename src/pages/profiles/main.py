@@ -381,24 +381,43 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
         name = meta.get('name') or meta.get('unit') or ''
         return f"[{col}] {name}" if name else col
 
-    field_opts = [{"label": field_label(c), "value": c} for c in available]
+    def has_usable_values(col):
+        if col not in df.columns:
+            return False
+        if col == "datetime":
+            return pd.to_numeric(df[col], errors="coerce").notna().any()
+        if pd.api.types.is_numeric_dtype(df[col]):
+            vals = pd.to_numeric(df[col], errors="coerce")
+            return np.isfinite(vals).any()
+        return df[col].notna().any()
+
+    usable = {c for c in available if has_usable_values(c)}
+    enabled_available = [c for c in available if c in usable]
+    field_opts = [
+        {"label": field_label(c), "value": c, "disabled": c not in usable}
+        for c in available
+    ]
 
     # Preserve current axis selections if still valid on range change, else use defaults
     is_single_dive = ndive_range and ndive_range[0] == ndive_range[1]
     range_changed = dash.ctx.triggered_id == AdvStoreIds.SELECTION_STORE
 
-    if range_changed and current_x in available:
+    if range_changed and current_x in usable:
         x_default = current_x
     else:
         x_default = (
-            next((f for f in ("temp",) if f in available), None)
-            or next((f for f in available if f not in non_physical), available[0])
+            next((f for f in ("temp", "t") if f in usable), None)
+            or next((f for f in enabled_available if f not in non_physical), None)
+            or (enabled_available[0] if enabled_available else None)
         )
 
-    if range_changed and current_y in available:
+    if range_changed and current_y in usable:
         y_default = current_y
     else:
-        y_default = "depth" if "depth" in available else (available[1] if len(available) > 1 else available[0])
+        y_default = "depth" if "depth" in usable else (
+            enabled_available[1] if len(enabled_available) > 1
+            else (enabled_available[0] if enabled_available else None)
+        )
 
     store = {
         "records": df.to_dict("records"),
@@ -407,7 +426,7 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
     }
 
     color_opts = [{"label": "ndive", "value": "ndive"}] + field_opts
-    color_values = {"ndive"} | {c["value"] for c in field_opts}
+    color_values = {"ndive"} | usable
     color_default = current_color if (range_changed and current_color in color_values) else "ndive"
 
     raw_points = int(df.attrs.get("raw_points", len(df)))
