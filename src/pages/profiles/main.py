@@ -308,6 +308,24 @@ def update_cast_options(instrument_name, selection, glider_sn):
 # ---------------------------------------------------------------------------
 # Callback 4: Build instrument DataFrame + axis defaults
 # ---------------------------------------------------------------------------
+def _format_large_datapoint_count(n_points: int) -> str:
+    n_points = int(n_points)
+    if n_points >= 1_000_000_000:
+        value = n_points / 1_000_000_000
+        unit = "billion"
+    else:
+        value = n_points / 1_000_000
+        unit = "million"
+
+    if value >= 100:
+        text = f"{value:.0f}"
+    elif value >= 10:
+        text = f"{value:.1f}"
+    else:
+        text = f"{value:.2f}"
+    return f"{text} {unit}"
+
+
 @app.callback(
     Output(AdvStoreIds.INSTRUMENT_DF_STORE, "data"),
     Output(AdvControlIds.X_AXIS_SELECT, "options"),
@@ -434,8 +452,9 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
     if shown_points < raw_points:
         reduction = 100 * (1 - shown_points / raw_points)
         warning = (
-            f"Showing {shown_points:,} of {raw_points:,} available data points "
-            f"({reduction:.1f}% reduction). To show all datapoints, request a smaller range."
+            "Excessive dive-selection data-volume notice. "
+            f"{_format_large_datapoint_count(raw_points)} datapoints decimated {reduction:.0f}%. "
+            "Plot loading may take a minute."
         )
         warning_open = True
     else:
