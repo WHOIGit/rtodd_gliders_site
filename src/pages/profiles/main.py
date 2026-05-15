@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
-from data_loader import GliderDataLoader, parse_mission_yyyymmm
+from data_loader import GliderDataLoader, parse_mission_yyyymmm, get_gdl as _get_gdl
 from utils import time_ticks, load_region_labels
 from .layout import layout
 from .names import AdvStoreIds, AdvControlIds, AdvGraphIds, AdvContainerIds
@@ -53,8 +53,7 @@ dash.register_page(
 
 app = dash.get_app()
 
-def _get_gdl() -> GliderDataLoader:
-    return GliderDataLoader(data_dir=Path("./data/sync"), auto_load=True)
+MAX_PROFILE_POINTS = 200_000
 
 # ArcGIS ocean basemap config (same as map page)
 _map_tile_layer = dict(
@@ -291,15 +290,14 @@ def update_cast_options(instrument_name, selection, glider_sn):
     if len(glider_sn) > 4 or glider_sn in gdl.archive_missions:
         gdl.load_archived(glider_sn)
     try:
-        df = gdl.build_instrument_df(glider_sn, instrument_name, ndive_range=ndive_range)
+        has_down, has_up = gdl.instrument_phase_presence(
+            glider_sn,
+            instrument_name,
+            ndive_range=ndive_range,
+        )
     except (KeyError, ValueError):
         return _all_opts
 
-    if df.empty or "phase" not in df.columns:
-        return _all_opts
-
-    has_down = (df["phase"] == 1).any()
-    has_up = (df["phase"] != 1).any()
     return [
         {"label": "All", "value": "all"},
         {"label": "Downcast", "value": "downcast", "disabled": not has_down},
@@ -318,6 +316,8 @@ def update_cast_options(instrument_name, selection, glider_sn):
     Output(AdvControlIds.Y_AXIS_SELECT, "value"),
     Output(AdvControlIds.COLOR_SELECT, "options"),
     Output(AdvControlIds.COLOR_SELECT, "value"),
+    Output(AdvContainerIds.DECIMATION_ALERT, "children"),
+    Output(AdvContainerIds.DECIMATION_ALERT, "is_open"),
     Input(AdvControlIds.INSTRUMENT_SELECT, "value"),
     Input(AdvStoreIds.SELECTION_STORE, "data"),
     State(AdvControlIds.GLIDER_SELECT, "value"),
@@ -349,12 +349,16 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
             glider_sn, instrument_name,
             ndive_range=ndive_range,
             phase=phase_filter,
+            max_points=MAX_PROFILE_POINTS,
         )
     except (KeyError, ValueError):
         raise PreventUpdate
 
     if df.empty:
-        return {"records": [], "columns": []}, no_update, no_update, no_update, no_update, no_update, no_update
+        return {
+            "records": [],
+            "columns": [],
+        }, no_update, no_update, no_update, no_update, no_update, no_update, "", False
 
     # Build axis field options with short_name labels
     exclude_cols = {"ndive", "glider_sn", "instrument", "phase"}
@@ -363,7 +367,14 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
 
     inst_key = gdl.instruments()[instrument_name]['key']
     info = gdl.glider_jsons[gdl.sn_to_filename(glider_sn)][inst_key]['info']
-    field_meta = {c: info.get(c, {}) for c in available}
+    field_meta = {}
+    for c in available:
+        meta = dict(info.get(c, {}))
+        if "unit" in meta and "units" not in meta:
+            meta["units"] = meta["unit"]
+        if "name" in meta and "short_name" not in meta:
+            meta["short_name"] = meta["name"]
+        field_meta[c] = meta
 
     def field_label(col):
         meta = field_meta[col]
@@ -399,7 +410,20 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
     color_values = {"ndive"} | {c["value"] for c in field_opts}
     color_default = current_color if (range_changed and current_color in color_values) else "ndive"
 
-    return store, field_opts, x_default, field_opts, y_default, color_opts, color_default
+    raw_points = int(df.attrs.get("raw_points", len(df)))
+    shown_points = int(df.attrs.get("shown_points", len(df)))
+    if shown_points < raw_points:
+        reduction = 100 * (1 - shown_points / raw_points)
+        warning = (
+            f"Showing {shown_points:,} of {raw_points:,} available data points "
+            f"({reduction:.1f}% reduction). To show all datapoints, request a smaller range."
+        )
+        warning_open = True
+    else:
+        warning = ""
+        warning_open = False
+
+    return store, field_opts, x_default, field_opts, y_default, color_opts, color_default, warning, warning_open
 
 
 # ---------------------------------------------------------------------------

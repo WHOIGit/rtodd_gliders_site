@@ -8,7 +8,7 @@ from dash.exceptions import PreventUpdate
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from data_loader import GliderDataLoader, parse_mission_yyyymmm
+from data_loader import GliderDataLoader, parse_mission_yyyymmm, get_gdl as _get_gdl
 from utils import time_ticks, load_region_labels
 from .layout import layout
 from .names import EngStoreIds, EngControlIds, EngGraphIds
@@ -47,15 +47,15 @@ dash.register_page(
 #   ┌──────────────────┬──────────────────────────────────────────────────────────┐
 #   │     Subplot      │                        Data path                         │
 #   ├──────────────────┼──────────────────────────────────────────────────────────┤
-#   │ Surface Pressure │ d['eng']['psurf'][i]                                     │
+#   │ Surface Pressure │ gdl.build_eng_summary_records()[i]["psurf"]              │
 #   ├──────────────────┼──────────────────────────────────────────────────────────┤
-#   │ Min Pressure     │ derived: min(d['eng']['p'][i])                           │
+#   │ Min Pressure     │ derived from the NetCDF eng pressure row                  │
 #   ├──────────────────┼──────────────────────────────────────────────────────────┤
-#   │ Max Pressure     │ d['eng']['pmax'][i]                                      │
+#   │ Max Pressure     │ gdl.build_eng_summary_records()[i]["pmax"]               │
 #   ├──────────────────┼──────────────────────────────────────────────────────────┤
-#   │ Dive Duration    │ d['eng']['divetime'][i]                                  │
+#   │ Dive Duration    │ derived from top-level track start/end times             │
 #   ├──────────────────┼──────────────────────────────────────────────────────────┤
-#   │ X-axis (all)     │ d['time'][i][0] — top-level unix timestamp, not from eng │
+#   │ X-axis (all)     │ top-level unix timestamp from the NetCDF track group     │
 #   └──────────────────┴──────────────────────────────────────────────────────────┘
 #
 #   Dive figure (Figure 2) — time series for selected dive:
@@ -63,23 +63,19 @@ dash.register_page(
 #   ┌──────────────┬────────────────────────────────────────────────────────┐
 #   │   Subplot    │                       Data path                        │
 #   ├──────────────┼────────────────────────────────────────────────────────┤
-#   │ Heading      │ d['eng']['head'][dive_idx]                             │
+#   │ Heading      │ gdl.build_eng_dive()["head"]                          │
 #   ├──────────────┼────────────────────────────────────────────────────────┤
-#   │ Pitch        │ d['eng']['pitch'][dive_idx]                            │
+#   │ Pitch        │ gdl.build_eng_dive()["pitch"]                         │
 #   ├──────────────┼────────────────────────────────────────────────────────┤
-#   │ Roll         │ d['eng']['roll'][dive_idx]                             │
+#   │ Roll         │ gdl.build_eng_dive()["roll"]                          │
 #   ├──────────────┼────────────────────────────────────────────────────────┤
-#   │ Pressure     │ d['eng']['p'][dive_idx]                                │
+#   │ Pressure     │ gdl.build_eng_dive()["p"]                             │
 #   ├──────────────┼────────────────────────────────────────────────────────┤
-#   │ X-axis (all) │ d['eng']['time'][dive_idx] — seconds within dive cycle │
+#   │ X-axis (all) │ gdl.build_eng_dive()["time"] — seconds within dive     │
 #   └──────────────┴────────────────────────────────────────────────────────┘
 
 
 app = dash.get_app()
-
-def _get_gdl() -> GliderDataLoader:
-    return GliderDataLoader(data_dir=Path("./data/sync"), auto_load=True)
-
 
 def _empty_fig(msg="No data"):
     fig = go.Figure()
@@ -200,45 +196,9 @@ def on_glider_select(glider_sn):
     gdl = _get_gdl()
     if len(glider_sn) > 4 or glider_sn in gdl.archive_missions:
         gdl.load_archived(glider_sn)
-    gdl.load_eng(glider_sn)
-    filename = gdl.sn_to_filename(glider_sn)
-    data = gdl.glider_jsons[filename]
-    eng = data.get("eng")
-    if eng is None:
+    rows = gdl.build_eng_summary_records(glider_sn)
+    if not rows:
         raise PreventUpdate
-    tl_time = data["time"]
-
-    def _get(key, i):
-        seq = eng.get(key)
-        if seq is None or i >= len(seq):
-            return None
-        return seq[i]
-
-    # eng["divetime"] encoding is inconsistent across glider type / source
-    # (sometimes seconds, sometimes minutes, sometimes a spurious timestamp).
-    # tl_time[i] = [start, end] unix seconds is reliable everywhere — use it.
-    def _duration_min(t_pair):
-        if not t_pair or len(t_pair) < 2 or t_pair[0] is None or t_pair[1] is None:
-            return None
-        return (t_pair[1] - t_pair[0]) / 60.0
-
-    rows = []
-    for i, ndive in enumerate(eng["ndive"]):
-        if ndive is None:
-            continue
-        t_pair = tl_time[i] if i < len(tl_time) else None
-        if not t_pair:
-            continue
-        dive_time = t_pair[0]
-        p_series = eng["p"][i] if "p" in eng and i < len(eng["p"]) else []
-        rows.append({
-            "ndive":    int(ndive),
-            "datetime": dive_time,
-            "psurf":    _get("psurf", i),
-            "pmax":     _get("pmax", i),
-            "pmin":     min(p_series) if p_series else None,
-            "divetime": _duration_min(t_pair),
-        })
 
     max_dive = max(r["ndive"] for r in rows) if rows else 1
 
@@ -419,28 +379,19 @@ def update_dive_fig(dive_num, glider_store):
     gdl = _get_gdl()
     if len(glider_sn) > 4 or glider_sn in gdl.archive_missions:
         gdl.load_archived(glider_sn)
-    gdl.load_eng(glider_sn)
-    filename = gdl.sn_to_filename(glider_sn)
-    data = gdl.glider_jsons[filename]
-    eng = data["eng"]
-    tl_time = data["time"]
-
-    dive_idx = int(dive_num) - 1
-    if dive_idx < 0 or dive_idx >= len(eng["time"]):
+    dive = gdl.build_eng_dive(glider_sn, int(dive_num))
+    if dive is None:
         return _empty_fig(f"Dive {dive_num} out of range")
 
-    x = eng["time"][dive_idx]
+    x = dive["time"]
     if not x:
         return _empty_fig(f"No data for dive {dive_num}")
 
-    t0 = None
-    if dive_idx < len(tl_time) and tl_time[dive_idx]:
-        t0 = tl_time[dive_idx][0]  # unix timestamp (seconds)
-
-    p     = eng["p"][dive_idx]
-    head  = eng["head"][dive_idx]
-    pitch = eng["pitch"][dive_idx]
-    roll  = eng["roll"][dive_idx]
+    t0 = dive["t0"]
+    p     = dive["p"]
+    head  = dive["head"]
+    pitch = dive["pitch"]
+    roll  = dive["roll"]
 
     fig = make_subplots(
         rows=4, cols=1,

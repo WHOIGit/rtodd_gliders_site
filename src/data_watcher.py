@@ -10,6 +10,8 @@ from pathlib import Path
 import datetime as dt
 
 import ijson
+import numpy as np
+from netCDF4 import Dataset
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,11 +21,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/app/data/sync"))
-SPLIT_DIR = Path(os.environ.get("SPLIT_DIR", str(DATA_DIR.parent / "splits")))
+NETCDF_DIR = Path(os.environ.get("NETCDF_DIR", str(DATA_DIR.parent / "netcdf")))
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "300"))
 
 TRACK_KEYS = {"mission", "glider_version", "time", "lat", "lon", "u", "v"}
+TRACK_PAIR_KEYS = {"time", "lat", "lon"}
 INSTRUMENT_KEYS = {"ctd", "opt", "dox", "ph"}
+COMPRESSION = dict(zlib=True, shuffle=True, complevel=4)
 
 
 def _json_default(obj):
@@ -32,7 +36,7 @@ def _json_default(obj):
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
-def atomic_write(path: Path, obj: dict) -> None:
+def atomic_write_json(path: Path, obj: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     try:
@@ -48,23 +52,12 @@ def atomic_write(path: Path, obj: dict) -> None:
 
 
 def manifest_entry_complete(entry: dict) -> bool:
-    track = entry.get("track")
-    if not track or not (SPLIT_DIR / track).exists():
-        return False
-
-    eng = entry.get("eng")
-    if eng and not (SPLIT_DIR / eng).exists():
-        return False
-
-    for fname in entry.get("instruments", {}).values():
-        if not (SPLIT_DIR / fname).exists():
-            return False
-
-    return True
+    store = entry.get("store")
+    return bool(store and (NETCDF_DIR / store).exists())
 
 
 def load_known_mtimes_from_manifest() -> dict:
-    manifest_path = SPLIT_DIR / "manifest.json"
+    manifest_path = NETCDF_DIR / "manifest.json"
     if not manifest_path.exists():
         return {}
 
@@ -80,7 +73,7 @@ def load_known_mtimes_from_manifest() -> dict:
         if source_mtime is None:
             continue
         if not manifest_entry_complete(entry):
-            logger.info(f"Manifest entry for {glider_id} incomplete; will re-split")
+            logger.info(f"Manifest entry for {glider_id} incomplete; will rebuild NetCDF")
             continue
         source_file = entry.get("source_file", f"{glider_id}_web.json")
         known_mtimes[source_file] = source_mtime
@@ -89,65 +82,241 @@ def load_known_mtimes_from_manifest() -> dict:
     return known_mtimes
 
 
-def split_glider_streaming(web_json_path: Path, split_dir: Path, glider_id: str) -> dict:
-    """Split a _web.json into track + eng + per-instrument files using streaming parse."""
-    logger.info(f"Splitting {web_json_path.name}")
+def _as_float_array(values, shape: tuple[int, ...] | None = None) -> np.ndarray:
+    arr = np.asarray(values, dtype="float64")
+    if shape is not None:
+        out = np.full(shape, np.nan, dtype="float64")
+        slices = tuple(slice(0, min(a, b)) for a, b in zip(arr.shape, out.shape))
+        out[slices] = arr[slices]
+        return out
+    return arr
+
+
+def _padded_2d(segments: list, n_dive: int) -> np.ndarray:
+    max_len = 1
+    for segment in segments:
+        if isinstance(segment, list):
+            max_len = max(max_len, len(segment))
+
+    arr = np.full((n_dive, max_len), np.nan, dtype="float64")
+    for i, segment in enumerate(segments[:n_dive]):
+        if not isinstance(segment, list) or not segment:
+            continue
+        vals = np.asarray(segment, dtype="float64")
+        arr[i, :len(vals)] = vals
+    return arr
+
+
+def _chunk_shape(arr: np.ndarray) -> tuple[int, ...]:
+    if arr.ndim == 1:
+        return (min(max(arr.shape[0], 1), 1024),)
+    if arr.ndim == 2:
+        return (min(max(arr.shape[0], 1), 16), max(arr.shape[1], 1))
+    return arr.shape
+
+
+def _create_float_var(group, name: str, dimensions: tuple[str, ...], arr: np.ndarray):
+    kwargs = dict(fill_value=np.nan)
+    if arr.size:
+        kwargs.update(COMPRESSION)
+        kwargs["chunksizes"] = _chunk_shape(arr)
+    var = group.createVariable(name, "f8", dimensions, **kwargs)
+    var[:] = arr
+    return var
+
+
+def _apply_info_attrs(var, info: dict | None) -> None:
+    if not isinstance(info, dict):
+        return
+    for attr_key, attr_value in info.items():
+        if attr_value is None:
+            continue
+        safe_key = "units" if attr_key == "unit" else attr_key
+        try:
+            setattr(var, safe_key, str(attr_value))
+        except Exception:
+            pass
+    if "name" in info and not hasattr(var, "long_name"):
+        var.long_name = str(info["name"])
+    if "unit" in info and not hasattr(var, "units"):
+        var.units = str(info["unit"])
+
+
+def _write_track(ds: Dataset, track: dict, n_dive: int) -> None:
+    group = ds.createGroup("track")
+    ds.createDimension("pair", 2)
+
+    for key in ("time", "lat", "lon"):
+        arr = _as_float_array(track.get(key, []), shape=(n_dive, 2))
+        _create_float_var(group, key, ("dive", "pair"), arr)
+
+    for key in ("u", "v"):
+        arr = _as_float_array(track.get(key, []), shape=(n_dive,))
+        _create_float_var(group, key, ("dive",), arr)
+
+
+def _write_instrument(parent, inst_key: str, inst_data: dict, n_dive: int) -> None:
+    group = parent.createGroup(inst_key)
+    info = inst_data.get("info", {}) if isinstance(inst_data, dict) else {}
+    group.info_json = json.dumps(info, separators=(",", ":"), default=_json_default)
+
+    sample_keys = [
+        key for key, value in inst_data.items()
+        if key not in {"info", "ndive"} and isinstance(value, list)
+    ]
+    max_len = 1
+    for key in sample_keys:
+        for segment in inst_data.get(key, []):
+            if isinstance(segment, list):
+                max_len = max(max_len, len(segment))
+
+    dim_name = f"{inst_key}_sample"
+    parent.parent.createDimension(dim_name, max_len)
+
+    for key in sample_keys:
+        arr = _padded_2d(inst_data.get(key, []), n_dive)
+        if arr.shape[1] != max_len:
+            padded = np.full((n_dive, max_len), np.nan, dtype="float64")
+            padded[:, :arr.shape[1]] = arr
+            arr = padded
+        var = _create_float_var(group, key, ("dive", dim_name), arr)
+        _apply_info_attrs(var, info.get(key))
+
+
+def _write_eng(ds: Dataset, eng_data: dict, n_dive: int) -> None:
+    group = ds.createGroup("eng")
+    info = eng_data.get("info", {}) if isinstance(eng_data, dict) else {}
+    group.info_json = json.dumps(info, separators=(",", ":"), default=_json_default)
+
+    summary_keys = []
+    sample_keys = []
+    for key, value in eng_data.items():
+        if key == "info" or not isinstance(value, list):
+            continue
+        if value and isinstance(value[0], list):
+            sample_keys.append(key)
+        else:
+            summary_keys.append(key)
+
+    for key in summary_keys:
+        arr = _as_float_array(eng_data.get(key, []), shape=(n_dive,))
+        var = _create_float_var(group, key, ("dive",), arr)
+        _apply_info_attrs(var, info.get(key))
+
+    max_len = 1
+    for key in sample_keys:
+        for segment in eng_data.get(key, []):
+            if isinstance(segment, list):
+                max_len = max(max_len, len(segment))
+    ds.createDimension("eng_sample", max_len)
+
+    for key in sample_keys:
+        arr = _padded_2d(eng_data.get(key, []), n_dive)
+        if arr.shape[1] != max_len:
+            padded = np.full((n_dive, max_len), np.nan, dtype="float64")
+            padded[:, :arr.shape[1]] = arr
+            arr = padded
+        var = _create_float_var(group, key, ("dive", "eng_sample"), arr)
+        _apply_info_attrs(var, info.get(key))
+
+
+def write_glider_netcdf(web_json_path: Path, netcdf_dir: Path, glider_id: str) -> dict:
+    """Convert one _web.json file into one compressed NetCDF4 file."""
+    logger.info(f"Writing NetCDF for {web_json_path.name}")
     source_mtime = web_json_path.stat().st_mtime
+    source_size = web_json_path.stat().st_size
 
-    track = {}
-    eng_filename = None
-    instrument_files = {}
+    track: dict = {}
+    pending_blocks: list[tuple[str, dict]] = []
+    instruments_written: list[str] = []
+    has_eng = False
+    n_dive: int | None = None
+    store_filename = f"{glider_id}.nc"
+    netcdf_dir.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=netcdf_dir, suffix=".nc.tmp")
+    os.close(fd)
+    tmp_path = Path(tmp)
+    try:
+        with Dataset(tmp_path, "w", format="NETCDF4") as ds:
+            ds.schema_version = "gliderapp-netcdf-v1"
+            ds.source_file = web_json_path.name
+            ds.source_mtime = source_mtime
+            ds.source_size = source_size
+            ds.created = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+            inst_parent = ds.createGroup("instruments")
 
-    with web_json_path.open("rb") as f:
-        for key, value in ijson.kvitems(f, "", use_float=True):
-            if key in TRACK_KEYS:
-                track[key] = value
+            def ensure_dive_dimension() -> int:
+                nonlocal n_dive
+                if n_dive is None:
+                    n_dive = len(track.get("time", []))
+                    ds.createDimension("dive", n_dive)
+                return n_dive
 
-            elif key == "eng":
-                eng_filename = f"{glider_id}_eng.json"
-                atomic_write(split_dir / eng_filename, value)
+            def write_block(block_key: str, block_value: dict) -> None:
+                nonlocal has_eng
+                current_n_dive = ensure_dive_dimension()
+                if block_key == "eng":
+                    _write_eng(ds, block_value, current_n_dive)
+                    has_eng = True
+                else:
+                    _write_instrument(inst_parent, block_key, block_value, current_n_dive)
+                    instruments_written.append(block_key)
 
-            elif key in INSTRUMENT_KEYS:
-                inst_filename = f"{glider_id}_{key}.json"
-                atomic_write(split_dir / inst_filename, value)
-                instrument_files[key] = inst_filename
+            with web_json_path.open("rb") as f:
+                for key, value in ijson.kvitems(f, "", use_float=True):
+                    if key in TRACK_KEYS:
+                        track[key] = value
+                    elif key == "eng" or key in INSTRUMENT_KEYS:
+                        if "time" not in track:
+                            pending_blocks.append((key, value))
+                        else:
+                            write_block(key, value)
 
-                if isinstance(value, dict) and "info" in value:
-                    track[key] = {"info": value["info"]}
+            ensure_dive_dimension()
+            for key, value in pending_blocks:
+                write_block(key, value)
+            _write_track(ds, track, n_dive)
+            ds.mission = str(track.get("mission", glider_id))
+            ds.glider_version = str(track.get("glider_version", ""))
 
-    track_filename = f"{glider_id}_track.json"
-    atomic_write(split_dir / track_filename, track)
+        os.replace(tmp_path, netcdf_dir / store_filename)
+    except Exception:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+        raise
 
     entry = {
-        "track": track_filename,
+        "store": store_filename,
+        "store_format": "netcdf4",
+        "schema_version": "gliderapp-netcdf-v1",
         "source_mtime": source_mtime,
         "source_file": web_json_path.name,
-        "instruments": instrument_files,
+        "source_size": source_size,
+        "ndive": n_dive,
+        "instruments": sorted(instruments_written),
+        "has_eng": has_eng,
     }
-    if eng_filename:
-        entry["eng"] = eng_filename
-
-    logger.info(
-        f"  -> {track_filename}, {eng_filename or '(no eng)'}, "
-        f"instruments: {list(instrument_files.keys())}"
-    )
+    logger.info(f"  -> {store_filename} ({n_dive} dives, instruments: {entry['instruments']})")
     return entry
 
 
 def build_manifest(gliders: dict) -> dict:
     return {
         "version": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+        "schema_version": "gliderapp-netcdf-v1",
         "gliders": gliders,
     }
 
 
-def scan_and_split(known_mtimes: dict) -> dict:
+def scan_and_convert(known_mtimes: dict) -> dict:
     web_files = sorted(DATA_DIR.glob("*_web.json"))
     if not web_files:
         logger.warning(f"No *_web.json files found in {DATA_DIR}")
         return known_mtimes
 
-    manifest_path = SPLIT_DIR / "manifest.json"
+    manifest_path = NETCDF_DIR / "manifest.json"
     existing_gliders: dict = {}
     if manifest_path.exists():
         try:
@@ -167,7 +336,6 @@ def scan_and_split(known_mtimes: dict) -> dict:
 
     for web_path in web_files:
         glider_id = web_path.name[:-9]  # strip "_web.json"
-
         current_mtime = web_path.stat().st_mtime
         prev_mtime = known_mtimes.get(web_path.name)
 
@@ -175,15 +343,15 @@ def scan_and_split(known_mtimes: dict) -> dict:
             continue
 
         try:
-            entry = split_glider_streaming(web_path, SPLIT_DIR, glider_id)
+            entry = write_glider_netcdf(web_path, NETCDF_DIR, glider_id)
             gliders[glider_id] = entry
             known_mtimes[web_path.name] = current_mtime
             updated = True
         except Exception as e:
-            logger.error(f"Failed to split {web_path.name}: {e}")
+            logger.error(f"Failed to convert {web_path.name}: {e}")
 
     if updated:
-        atomic_write(manifest_path, build_manifest(gliders))
+        atomic_write_json(manifest_path, build_manifest(gliders))
         logger.info(f"Manifest written: {len(gliders)} gliders")
 
     return known_mtimes
@@ -203,20 +371,20 @@ except OSError:
 def main():
     logger.info(
         f"data-watcher starting. DATA_DIR={DATA_DIR} "
-        f"SPLIT_DIR={SPLIT_DIR} POLL_INTERVAL={POLL_INTERVAL}s"
+        f"NETCDF_DIR={NETCDF_DIR} POLL_INTERVAL={POLL_INTERVAL}s"
     )
-    SPLIT_DIR.mkdir(parents=True, exist_ok=True)
+    NETCDF_DIR.mkdir(parents=True, exist_ok=True)
 
     known_mtimes = load_known_mtimes_from_manifest()
 
-    known_mtimes = scan_and_split(known_mtimes)
+    known_mtimes = scan_and_convert(known_mtimes)
     gc.collect()
     _trim_heap()
 
     while True:
         time.sleep(POLL_INTERVAL)
         logger.info("Polling for changes...")
-        known_mtimes = scan_and_split(known_mtimes)
+        known_mtimes = scan_and_convert(known_mtimes)
         gc.collect()
         _trim_heap()
 

@@ -55,6 +55,9 @@ Set in `compose.yml` for production; override in `.env` for local development.
 | `PUBLICATIONS_HTML_PATH` | `config/publications.html` | Path to publications HTML |
 | `HOME_HTML_PATH` | `config/homepage.html` | Path to home page HTML |
 | `DATAPAGE_HTML_PATH` | `config/datapage.html` | Path to data page HTML |
+| `DATA_DIR` | `/app/data/sync` | Source glider JSON directory for `data-watcher` |
+| `NETCDF_DIR` | `/app/data/netcdf` | Generated NetCDF cache directory for `data-watcher` and the app |
+| `POLL_INTERVAL` | `300` | Seconds between `data-watcher` source scans |
 
 ## Local Development
 

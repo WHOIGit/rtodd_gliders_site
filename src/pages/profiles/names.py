@@ -30,3 +30,4 @@ class AdvGraphIds:
 class AdvContainerIds:
     DIVE_INPUT2_CONTAINER = "adv-dive-input2-container"
     MINIMAP_CARD = "adv-minimap-card"
+    DECIMATION_ALERT = "adv-decimation-alert"

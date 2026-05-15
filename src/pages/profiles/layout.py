@@ -24,6 +24,12 @@ def _controls_card():
     return dbc.Card(
         dbc.CardBody([
             html.H5("Advanced Data Explorer", className="mb-3"),
+            dbc.Alert(
+                id=AdvContainerIds.DECIMATION_ALERT,
+                color="warning",
+                is_open=False,
+                className="py-2 mb-3 small",
+            ),
 
             # Glider selection (label flips to "Mission" in archived mode)
             dbc.Row([

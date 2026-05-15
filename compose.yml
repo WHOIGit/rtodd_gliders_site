@@ -6,8 +6,8 @@ services:
       dockerfile: Dockerfile
     command: ["python", "src/data_watcher.py"]
     volumes:
-      - ./data:/app/data:ro
-      - ./data/split:/app/data/split
+      - ./data/sync:/app/data/sync:ro
+      - ./data/netcdf:/app/data/netcdf:rw
     restart: unless-stopped
     environment:
       - PYTHONUNBUFFERED=1
