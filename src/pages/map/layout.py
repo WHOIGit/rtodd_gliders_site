@@ -8,9 +8,9 @@ import dash_leaflet as dl
 
 from .names import *
 from utils import load_map_region_config
-from data_loader import GliderDataLoader
+from data_loader import DEFAULT_DATA_DIR, GliderDataLoader
 
-_gdl = GliderDataLoader(data_dir=Path("./data/sync"), auto_load=False)
+_gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=False)
 _active_regions = {m["region"] for m in _gdl.active_meta.values()}
 _default_region, _region_options, _region_presets, _ = load_map_region_config(
     Path("config/map_config.yml").resolve(),
@@ -227,6 +227,7 @@ def main_layout():
         ],
         id=ContainerIds.MAP_LOADING_OVERLAY,
         className="map-loading-overlay",
+        style={"backgroundImage": f"url({app.get_asset_url('spray_cropped_800.jpg')})"},
     )
 
     leaflet_map = dl.Map(

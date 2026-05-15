@@ -16,10 +16,11 @@ def make_navbar() -> dbc.Navbar:
     NAVBAR_TOGGLE_ID = "navbar-toggler"
     NAVBAR_COLLAPSE_ID = "navbar-collapse"
 
+    prod_env = os.environ.get('PROD', 'False').lower() in ("true", "1")
+    subpath = os.environ.get("SUBPATH", "/dashapp" if prod_env else "").rstrip("/")
+
     def href(path):
-        if os.environ.get('PROD', 'False').lower() in ("true", "1"):
-            return '/dashapp' + path
-        return path
+        return subpath + path
 
     nav_links = [
         dbc.NavItem(

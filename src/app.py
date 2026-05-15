@@ -25,12 +25,13 @@ dash_kwargs = {
 
 TRUTHY = ("true", "1", "yes", "on", "en", "enable", "enabled")
 PROD_ENV = os.environ.get("PROD", "False").lower() in TRUTHY
+SUBPATH = os.environ.get("SUBPATH", "/dashapp" if PROD_ENV else "").rstrip("/")
 
 if PROD_ENV:
     dash_kwargs.update(
         {
             "routes_pathname_prefix": "/",
-            "requests_pathname_prefix": "/dashapp/",
+            "requests_pathname_prefix": f"{SUBPATH}/" if SUBPATH else "/",
             "assets_url_path": "/assets",
         }
     )

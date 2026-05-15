@@ -1,6 +1,7 @@
 # data_loader.py
 import json
 import datetime as dt
+import os
 import threading
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -789,22 +790,22 @@ class GliderDataLoader:
 # Per-worker singleton with manifest-mtime version check
 # ---------------------------------------------------------------------------
 
-_DEFAULT_DATA_DIR = Path("./data/sync")
-_DEFAULT_NETCDF_DIR = Path("./data/netcdf")
+DEFAULT_DATA_DIR = Path(os.environ.get("DATA_DIR", "./data/sync"))
+DEFAULT_NETCDF_DIR = Path(os.environ.get("NETCDF_DIR", str(DEFAULT_DATA_DIR.parent / "netcdf")))
 
 _gdl: Optional[GliderDataLoader] = None
 _gdl_version: float = 0.0
 
 
-def _source_version(netcdf_dir: Path = _DEFAULT_NETCDF_DIR) -> float:
+def _source_version(netcdf_dir: Path = DEFAULT_NETCDF_DIR) -> float:
     try:
         return (netcdf_dir / "manifest.json").stat().st_mtime
     except FileNotFoundError:
         return 0.0
 
 
-def get_gdl(data_dir: Path = _DEFAULT_DATA_DIR,
-            netcdf_dir: Path = _DEFAULT_NETCDF_DIR) -> GliderDataLoader:
+def get_gdl(data_dir: Path = DEFAULT_DATA_DIR,
+            netcdf_dir: Path = DEFAULT_NETCDF_DIR) -> GliderDataLoader:
     """Return a per-worker singleton GliderDataLoader.
 
     Rebuilds the loader only when data/netcdf/manifest.json mtime changes.

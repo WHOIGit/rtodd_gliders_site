@@ -27,7 +27,7 @@ If the codebase changes, these are also the steps needed to deploy the code chan
 - **Port:** 8050
 - **WSGI server:** gunicorn
 - **Volumes:** `./data` and `./config` are mounted read-only into the container
-- **Environment:** `PROD=1` and `DEBUG=0` are set in `compose.yml`
+- **Environment:** production defaults live in `dotenv`; local overrides live in ignored `.env`
 
 ## Configuration
 
@@ -45,12 +45,14 @@ Changes take effect after restarting the container (`docker compose up --force-r
 
 ### Environment variables
 
-Set in `compose.yml` for production; override in `.env` for local development.
+Production defaults are committed in `dotenv`. Docker Compose also reads an ignored
+`.env` file after `dotenv`, so local or host-specific values can override the defaults.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PROD` | `1` | Enables production routing (`/dashapp/` prefix) |
 | `DEBUG` | `0` | Debug mode |
+| `SUBPATH` | `/dashapp` | External URL prefix used for Dash requests, nav links, and static HTML asset paths |
 | `PORTRAITS_DEFAULT` | `default.jpg` | Fallback portrait image |
 | `PUBLICATIONS_HTML_PATH` | `config/publications.html` | Path to publications HTML |
 | `HOME_HTML_PATH` | `config/homepage.html` | Path to home page HTML |

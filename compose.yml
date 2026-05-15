@@ -9,6 +9,9 @@ services:
       - ./data/sync:/app/data/sync:ro
       - ./data/netcdf:/app/data/netcdf:rw
     restart: unless-stopped
+    env_file:
+      - path: prod.env
+        required: true
     environment:
       - PYTHONUNBUFFERED=1
 
@@ -18,10 +21,11 @@ services:
     ports:
       - "8050:8050"
     restart: unless-stopped
+    env_file:
+      - path: prod.env
+        required: true
     environment:
       - PYTHONUNBUFFERED=1
-      - PROD=1
-      - DEBUG=0
     volumes:
       - ./data:/app/data:ro
       - ./config:/app/config:ro

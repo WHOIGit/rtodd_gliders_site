@@ -157,7 +157,6 @@
     width: 100%; height: 100%;
     z-index: 500;                      /* above leaflet panes, below .map-overlay (1000) */
 
-    background-image: url("/dashapp/assets/spray_cropped_800.jpg");
     background-size: cover;
     background-position: center;
     filter: brightness(0.6);

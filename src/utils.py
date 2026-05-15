@@ -262,7 +262,7 @@ def latlon_offset(lat, lon, v_dy, u_dx, scale=1):
     return new_lat, new_lon
 
 
-def static_layout(html_file: str, title: str = None) -> html.Div:
+def static_layout(html_file: str, title: str = None, subst: dict[str, str] | None = None) -> html.Div:
     """
     Generic static HTML layout with optional title.
 
@@ -279,6 +279,9 @@ def static_layout(html_file: str, title: str = None) -> html.Div:
         A Dash Div containing the title (if provided) and HTML content.
     """
     html_text = (Path.cwd() / html_file).read_text(encoding="utf-8")
+    if subst:
+        for key, value in subst.items():
+            html_text = html_text.replace("{" + key + "}", value)
     children = []
     if title:
         children.append(html.H1(title))

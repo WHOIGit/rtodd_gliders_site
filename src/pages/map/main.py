@@ -16,7 +16,7 @@ import pandas as pd
 # Dash pages expects a `layout` variable in the module
 from dash.exceptions import PreventUpdate
 
-from data_loader import GliderDataLoader
+from data_loader import DEFAULT_DATA_DIR, GliderDataLoader
 from utils import latlon_offset, load_map_region_config, load_region_labels
 
 _REGION_LABELS = load_region_labels(Path("config/map_config.yml").resolve())
@@ -212,7 +212,7 @@ def rgb_to_hex(r:int, g:int, b:int, a=None):
 
 
 def _load_region_config():
-    gdl = GliderDataLoader(data_dir=Path("./data/sync"), auto_load=False)
+    gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=False)
     active_regions = {m["region"] for m in gdl.active_meta.values()}
     return load_map_region_config(
         Path("config/map_config.yml").resolve(),
@@ -599,7 +599,7 @@ def zoom_to_legend(_clicks, gbounds):
 
 
 def load_mapdata_from_source():
-    gdl = GliderDataLoader(data_dir=Path("./data/sync"), auto_load=True)
+    gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=True)
     latlon_records, uv_records = {}, {}
     for sn in gdl.glider_sns():
         latlon_records[sn] = gdl.build_glider_df(sn).to_dict('records')
@@ -681,7 +681,7 @@ def set_glider_options(store_data, search_value):
     store_data = store_data or {}
     latlon_records = store_data.get("latlon_records", {})
     loaded = set(latlon_records.keys())
-    gdl = GliderDataLoader(data_dir=Path("./data/sync"), auto_load=False)
+    gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=False)
     all_sns = sorted(set(gdl.all_active_sns()) | loaded)
     rows = []
     for sn in all_sns:
