@@ -491,8 +491,11 @@ class GliderDataLoader:
                 raise KeyError(instrument_name)
             inst_group = inst_parent.groups[instrument_key]
             time_var = inst_group.variables.get("time")
-            if time_var is None:
+            reference_key = self._instrument_reference_key(inst_group.variables)
+            if time_var is None and reference_key is None:
                 return pd.DataFrame()
+            reference_var = time_var if time_var is not None else inst_group.variables[reference_key]
+            has_sample_time = time_var is not None
 
             n_dive = len(ds.dimensions["dive"])
             start_dive, end_dive = ndive_range if ndive_range is not None else (1, n_dive)
@@ -504,6 +507,8 @@ class GliderDataLoader:
             sample_keys = [key for key in inst_group.variables if key != "time"]
             for key in sample_keys:
                 flat_data[key] = []
+            if not has_sample_time:
+                flat_data["sample"] = []
 
             chunk_slices = [
                 slice(i, min(i + self.PROFILE_READ_CHUNK_DIVES, end_idx))
@@ -511,21 +516,22 @@ class GliderDataLoader:
             ]
 
             for chunk_slice in chunk_slices:
-                rel_time = _filled(time_var[chunk_slice, :])
+                sample_axis = _filled(reference_var[chunk_slice, :])
                 phase_arr = _filled(inst_group.variables["phase"][chunk_slice, :]) \
                     if "phase" in inst_group.variables else None
-                raw_points += self._profile_raw_count(rel_time, phase_arr=phase_arr, phase=phase)
+                raw_points += self._profile_raw_count(sample_axis, phase_arr=phase_arr, phase=phase)
 
             if max_points and raw_points > max_points:
                 stride = max(2, int(np.ceil(raw_points / max_points)))
 
             for chunk_slice in chunk_slices:
-                rel_time = _filled(time_var[chunk_slice, :])
+                sample_axis = _filled(reference_var[chunk_slice, :])
+                rel_time = _filled(time_var[chunk_slice, :]) if has_sample_time else None
                 track_time = _filled(ds.groups["track"].variables["time"][chunk_slice, :])
                 phase_arr = _filled(inst_group.variables["phase"][chunk_slice, :]) \
                     if "phase" in inst_group.variables else None
                 keep_masks = self._profile_keep_masks_for_stride(
-                    rel_time,
+                    sample_axis,
                     phase_arr=phase_arr,
                     phase=phase,
                     stride=stride,
@@ -535,14 +541,20 @@ class GliderDataLoader:
                     mask = keep_masks[row_idx]
                     if not mask.any():
                         continue
-                    times = rel_time[row_idx, mask]
-                    flat_data["divetime"].extend(times.tolist())
-                    t0 = track_time[row_idx, 0]
-                    if np.isfinite(t0):
-                        flat_data["datetime"].extend((times + t0).tolist())
+                    if has_sample_time:
+                        times = rel_time[row_idx, mask]
+                        flat_data["divetime"].extend(times.tolist())
+                        t0 = track_time[row_idx, 0]
+                        if np.isfinite(t0):
+                            flat_data["datetime"].extend((times + t0).tolist())
+                        else:
+                            flat_data["datetime"].extend([None] * len(times))
                     else:
-                        flat_data["datetime"].extend([None] * len(times))
-                    flat_data["ndive"].extend([dive_idx + 1] * len(times))
+                        n_points = int(mask.sum())
+                        flat_data["divetime"].extend([None] * n_points)
+                        flat_data["datetime"].extend([None] * n_points)
+                        flat_data["sample"].extend((np.flatnonzero(mask) + 1).tolist())
+                    flat_data["ndive"].extend([dive_idx + 1] * int(mask.sum()))
                     shown_points += int(mask.sum())
 
                 for key in sample_keys:
@@ -567,6 +579,16 @@ class GliderDataLoader:
             df = df[(df['datetime'] >= t_start) & (df['datetime'] <= t_end)]
 
         return df
+
+    @staticmethod
+    def _instrument_reference_key(variables) -> Optional[str]:
+        for key in ("time", "p", "depth", "t", "s", "theta", "fl", "oxconc", "ph"):
+            if key in variables:
+                return key
+        for key, var in variables.items():
+            if len(getattr(var, "dimensions", ())) == 2:
+                return key
+        return None
 
     @staticmethod
     def _profile_raw_count(
@@ -756,8 +778,11 @@ class GliderDataLoader:
         key = reverse.get(instrument_name)
         if key is None:
             return False
-        filename = self.sn_to_filename(glider_id)
-        return key in self.glider_jsons[filename]
+        with _NETCDF_LOCK, self._open_dataset(glider_id) as ds:
+            inst_parent = ds.groups.get("instruments")
+            if inst_parent is None or key not in inst_parent.groups:
+                return False
+            return self._instrument_reference_key(inst_parent.groups[key].variables) is not None
 
 
 # ---------------------------------------------------------------------------
