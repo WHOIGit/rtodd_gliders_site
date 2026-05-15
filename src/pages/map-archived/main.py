@@ -480,33 +480,37 @@ def _legend_children(region_items):
             )
         )
 
-    return [
-        html.Div(
-            [
-                html.Span("Archive Missions", className="map-legend-title"),
-                _icon_button(
-                    "bi-search",
-                    "archive-map-legend-master-zoom",
-                    "Zoom to all archive tracks",
-                    class_name="map-legend-eye map-legend-eye-master archive-legend-zoom",
-                    disabled=not bool(all_available),
-                ),
-                _icon_button(
-                    master_icon,
-                    "archive-map-legend-master-eye",
-                    "Hide all" if any_visible else "Show all",
-                    class_name="map-legend-eye map-legend-eye-master",
-                    disabled=not bool(all_available),
-                ),
-            ],
-            className="map-legend-header",
-        ),
-        html.Div(
-            region_sections,
-            id="archive-map-legend-accordion",
-            className="archive-map-legend-accordion",
-        ),
-    ]
+    return html.Details(
+        [
+            html.Summary(
+                [
+                    html.Span("Archive Missions", className="map-legend-title"),
+                    _icon_button(
+                        "bi-search",
+                        "archive-map-legend-master-zoom",
+                        "Zoom to all archive tracks",
+                        class_name="map-legend-eye map-legend-eye-master archive-legend-zoom",
+                        disabled=not bool(all_available),
+                    ),
+                    _icon_button(
+                        master_icon,
+                        "archive-map-legend-master-eye",
+                        "Hide all" if any_visible else "Show all",
+                        class_name="map-legend-eye map-legend-eye-master",
+                        disabled=not bool(all_available),
+                    ),
+                ],
+                className="map-legend-header archive-map-legend-master-summary",
+            ),
+            html.Div(
+                region_sections,
+                id="archive-map-legend-accordion",
+                className="archive-map-legend-accordion",
+            ),
+        ],
+        open=True,
+        className="archive-map-legend-master",
+    )
 
 
 @app.callback(
