@@ -272,7 +272,7 @@ def static_layout(html_file: str, title: str = None, subst: dict[str, str] | Non
         children.append(html.H1(title))
     children.append(
         html.Div(
-            Purify(html_text),
+            Purify(html=html_text),
             style={"maxWidth": "800px", "margin": "0 auto"},
         )
     )
