@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 
 from data_loader import DEFAULT_DATA_DIR, GliderDataLoader, parse_mission_yyyymmm
-from utils import load_map_region_config, load_region_labels
+from utils import load_map_region_config, load_region_labels, section_chart_specs
 from .layout import layout, TILE_URL
 from .names import MapIds, StoreIds, ControlIds, ContainerIds, TextIds, IntervalIds
 
@@ -794,16 +794,10 @@ def populate_section_details(mission_id, section_num):
     mission_url = f"https://gliders.whoi.edu/data/archive/{mission_id}.html"
     url_pattern = "https://gliders.whoi.edu/data/figs/archive/{MISSION}/{KEY}_{SECTION}.png"
 
-    static_charts = dict(
-        map="Track and Vertically Averaged Currents",
-        TS="Potential Temperature - Salinity",
-        theta="Potential Temperature",
-        s="Salinity",
-        fl="Chlorophyll",
-        oxumolkg="Dissolved Oxygen",
-        ph="pH",
-        c="Sound Speed",
-    )
+    # Charts are driven by the mission's variable list in archive.csv/archive2.csv
+    # so plots the mission doesn't carry are never rendered (no broken images).
+    gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=False)
+    chart_specs = section_chart_specs(gdl.section_variables(mission_id), gdl.variable_names)
 
     mission_link = html.Div(
         [
@@ -815,11 +809,11 @@ def populate_section_details(mission_id, section_num):
     if section_num is None:
         return html.Div([mission_link, "Select a section to see plots."])
 
-    def img_block(series):
+    def img_block(series, header):
         url = url_pattern.format(MISSION=mission_id, KEY=series, SECTION=section_num)
         return html.Div(
             [
-                html.H4(static_charts[series]),
+                html.H4(header),
                 html.A(
                     html.Img(src=url, style={"width": "100%", "max-width": "300px", "margin-top": "10px"}),
                     href=url,
@@ -833,7 +827,7 @@ def populate_section_details(mission_id, section_num):
         [
             mission_link,
             html.H3(f"Section {section_num} Plots"),
-            *[img_block(key) for key in static_charts.keys()],
+            *[img_block(key, header) for key, header in chart_specs],
         ]
     )
 

@@ -82,6 +82,7 @@ class GliderDataLoader:
         self.active_sns: set[str] = set()
         self.active_meta: Dict[str, Dict[str, Any]] = dict()
         self.archive_missions: Dict[str, Dict[str, Any]] = dict()
+        self.variable_names: Dict[str, str] = dict()
         self._instruments_cache: Optional[Dict[str, dict]] = None
         self._manifest: Dict[str, Any] = {"gliders": {}}
 
@@ -89,6 +90,7 @@ class GliderDataLoader:
         self.load_secsactive()
         self.load_archive()
         self.load_secsarchive()
+        self.load_variables()
         self._load_manifest()
 
         if auto_load:
@@ -120,7 +122,11 @@ class GliderDataLoader:
                 if active != 1:
                     continue
                 self.active_sns.add(sn)
-                self.active_meta[sn] = {"region": region, "type": spray_type}
+                self.active_meta[sn] = {
+                    "region": region,
+                    "type": spray_type,
+                    "variables": [p.strip() for p in parts[4:] if p.strip()],
+                }
 
     def load_active1(self) -> None:
         self._load_active_csv("active.csv", "spray1")
@@ -197,7 +203,11 @@ class GliderDataLoader:
                 if spray_type == "spray1" and len(mid) == 7 and mid.isalnum():
                     mid = mid.zfill(8)
                 region = parts[1].strip()
-                self.archive_missions[mid] = {"region": region, "type": spray_type}
+                self.archive_missions[mid] = {
+                    "region": region,
+                    "type": spray_type,
+                    "variables": [p.strip() for p in parts[3:] if p.strip()],
+                }
 
     def load_archive1(self) -> None:
         self._load_archive_csv("archive.csv", "spray1")
@@ -220,6 +230,31 @@ class GliderDataLoader:
     def load_secsarchive(self) -> None:
         self.load_secsarchive1()
         self.load_secsarchive2()
+
+    def load_variables(self) -> None:
+        """Load variable display names from variables.csv (key, name, units)."""
+        path = self.data_dir / "variables.csv"
+        if not path.exists():
+            logger.warning("variables.csv not found; variable display names unavailable")
+            return
+        with path.open() as f:
+            for line in f:
+                parts = line.split(",")
+                if len(parts) < 2:
+                    continue
+                key = parts[0].strip()
+                name = parts[1].strip()
+                if key and name:
+                    self.variable_names[key] = name
+
+    def section_variables(self, key: str) -> list[str]:
+        """Plot variable tokens for a glider SN or archive mission ID.
+
+        Sourced from the active*/archive* CSVs; drives the Section Details charts.
+        Returns an empty list when the SN/mission is unknown or lists no variables.
+        """
+        meta = self.active_meta.get(str(key)) or self.archive_missions.get(str(key))
+        return list(meta.get("variables", [])) if meta else []
 
     # ------------------------------------------------------------------
     # NetCDF manifest and track loading

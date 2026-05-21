@@ -215,6 +215,46 @@ def load_map_region_config(config_path, active_regions=None):
     return default_region, region_options, glider_image_url
 
 
+# ---------------------------------------------------------------------------
+# Section Details charts
+# ---------------------------------------------------------------------------
+
+# Hardcoded display headers for Section Details chart keys. `map` and `TS` are
+# always shown first; the remaining charts follow each glider/mission's variable
+# list from the active*/archive* CSVs, in CSV order. A key not listed here falls
+# back to its variables.csv name, then to the raw key.
+_CHART_HEADERS = {
+    "map": "Track and Vertically Averaged Currents",
+    "TS": "Potential Temperature - Salinity",
+    "theta": "Potential Temperature",
+    "s": "Salinity",
+    "fl": "Chlorophyll",
+    "oxconc": "Dissolved Oxygen",
+    "oxumolkg": "Dissolved Oxygen",
+    "ph": "pH",
+    "c": "Sound Speed",
+}
+
+
+def chart_header(key: str, variable_names: dict | None = None) -> str:
+    """Display header for a Section Details chart key."""
+    if key in _CHART_HEADERS:
+        return _CHART_HEADERS[key]
+    if variable_names and key in variable_names:
+        return variable_names[key]
+    return key
+
+
+def section_chart_specs(variables, variable_names=None) -> list[tuple[str, str]]:
+    """Ordered (chart_key, header) pairs for the Section Details block.
+
+    `map` and `TS` always lead and are always present; the per-glider/mission
+    `variables` list (from the active*/archive* CSVs) follows, in CSV order.
+    """
+    keys = ["map", "TS", *(variables or [])]
+    return [(key, chart_header(key, variable_names)) for key in keys]
+
+
 def latlon_offset(lat, lon, v_dy, u_dx, scale=1):
     """
     Calculate new latitude and longitude given offsets in meters.

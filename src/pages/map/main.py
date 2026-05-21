@@ -16,7 +16,7 @@ import pandas as pd
 from dash.exceptions import PreventUpdate
 
 from data_loader import DEFAULT_DATA_DIR, GliderDataLoader
-from utils import latlon_offset, load_map_region_config, load_region_labels
+from utils import latlon_offset, load_map_region_config, load_region_labels, section_chart_specs
 
 _REGION_LABELS = load_region_labels(Path("config/map_config.yml").resolve())
 
@@ -726,26 +726,18 @@ def set_glider_options(store_data, search_value):
     Output(TextIds.SECTION_DETAILS_TEXT, "children"),
     Input(ControlIds.GLIDER_SELECT, "value"),
     Input(ControlIds.SECTION_SELECT, "value"),
-    State(StoreIds.MAPDATA_STORE, "data"),
 )
-def populate_section_details(glider_sn, section_num, store_data):
+def populate_section_details(glider_sn, section_num):
     if not glider_sn:
         return "Select a glider to see details."
-    store_data = store_data or {}
 
     url_realtime_pattern = 'https://gliders.whoi.edu/data/realtime/{:04d}.html'
     url_pattern = 'https://gliders.whoi.edu/data/figs/realtime/{SN:04d}/{KEY}_{SECTION}.png'
 
-    static_charts = dict(
-        map="Track and Depth-Average Currents",
-        TS="Potential Temperature - Salinity",
-        theta="Potential Temperature",
-        s="Salinity",
-        fl="Chlorophyll",
-        oxumolkg="Dissolved Oxygen",
-        ph="pH",
-        c="Sound Speed",
-    )
+    # Charts are driven by the glider's variable list in active.csv/active2.csv
+    # so plots the glider doesn't carry are never rendered (no broken images).
+    gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=False)
+    chart_specs = section_chart_specs(gdl.section_variables(glider_sn), gdl.variable_names)
 
     # Mission link - always shown when glider is selected
     mission_link = html.Div([
@@ -754,29 +746,24 @@ def populate_section_details(glider_sn, section_num, store_data):
 
     # Section plot images - only shown when section is selected
     if section_num is None:
-        details = html.Div([mission_link, "Select a section to see plots."])
-        return details
+        return html.Div([mission_link, "Select a section to see plots."])
 
-    def img_block(series):
+    def img_block(series, header):
         url = url_pattern.format(SN=int(glider_sn), KEY=series, SECTION=section_num)
-        block = html.Div([
-            html.H4(static_charts[series]),
+        return html.Div([
+            html.H4(header),
             html.A(
                 html.Img(src=url, style={"width": "100%", "max-width": "300px", "margin-top": "10px"}),
                 href=url,
                 target="_blank",
             )
         ], style={"margin-bottom": "20px"})
-        return block
 
-    images = [img_block(key) for key in static_charts.keys()]
-
-    details = html.Div([
+    return html.Div([
         mission_link,
         html.H3(f"Section {section_num} Plots"),
-        *images
+        *[img_block(key, header) for key, header in chart_specs],
     ])
-    return details
 
 def get_sections_for_glider(store_data, glider_sn):
     latlon_records = (store_data or {}).get("latlon_records", {})
