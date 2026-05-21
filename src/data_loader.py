@@ -513,7 +513,15 @@ class GliderDataLoader:
             else:
                 mask = (nd >= start) & (nd <= end)
             section[mask] = i
-        df["section"] = np.nan_to_num(section, nan=1).astype(int)
+        # Dives outside every CSV range — gaps between sections, or dives after
+        # the last section — inherit the previous section's number instead of
+        # collapsing onto section 1. Otherwise their points join section 1's
+        # polyline and the map draws straight lines across non-adjacent dives.
+        # Rows are already in dive order (build_glider_df/build_uv_df), so a
+        # row-wise fill is a dive-order fill; bfill covers a leading gap before
+        # the first section and fillna(1) is a final safety net.
+        section = pd.Series(section).ffill().bfill().fillna(1)
+        df["section"] = section.to_numpy().astype(int)
         return df
 
     def sections_for_glider(self, glider_id: str) -> list[dict]:
