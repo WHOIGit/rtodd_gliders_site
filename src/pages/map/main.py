@@ -15,7 +15,7 @@ import pandas as pd
 # Dash pages expects a `layout` variable in the module
 from dash.exceptions import PreventUpdate
 
-from data_loader import DEFAULT_DATA_DIR, GliderDataLoader
+from data_loader import DEFAULT_DATA_DIR, GliderDataLoader, get_gdl
 from utils import latlon_offset, load_map_region_config, load_region_labels, section_chart_specs
 
 _REGION_LABELS = load_region_labels(Path("config/map_config.yml").resolve())
@@ -352,13 +352,24 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, hidden
             uv_lines = []
             for section, df_uv_sec in df_uv.groupby("section", sort=False):
                 opacity = float(opacities[section - 1])
-
-                for _, row in df_uv_sec.iterrows():
-                    lat, lon = row["lat"], row["lon"]
-                    vlat, ulon = latlon_offset(lat, lon, row["v"], row["u"], uv_scale)
+                lat = df_uv_sec["lat"].to_numpy()
+                lon = df_uv_sec["lon"].to_numpy()
+                vlat, ulon = latlon_offset(
+                    lat, lon, df_uv_sec["v"].to_numpy(), df_uv_sec["u"].to_numpy(), uv_scale
+                )
+                # One multi-segment polyline per section: each ray is its own
+                # [start, end] segment, so they render disconnected within a
+                # single layer instead of one Polyline component per vector.
+                segments = [
+                    [[la, lo], [vla, ulo]]
+                    for la, lo, vla, ulo in zip(
+                        lat.tolist(), lon.tolist(), vlat.tolist(), ulon.tolist()
+                    )
+                ]
+                if segments:
                     uv_lines.append(
                         dl.Polyline(
-                            positions=[[lat, lon], [vlat, ulon]],
+                            positions=segments,
                             color=color_hex,
                             opacity=opacity,
                             weight=1,
@@ -624,7 +635,7 @@ def zoom_to_legend(_clicks, gbounds):
 
 
 def load_mapdata_from_source():
-    gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=True)
+    gdl = get_gdl()
     latlon_records, uv_records = {}, {}
     for sn in gdl.glider_sns():
         latlon_records[sn] = gdl.build_glider_df(sn).to_dict('records')
@@ -689,7 +700,7 @@ def set_glider_options(store_data, search_value):
     store_data = store_data or {}
     latlon_records = store_data.get("latlon_records", {})
     loaded = set(latlon_records.keys())
-    gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=False)
+    gdl = get_gdl()
     all_sns = sorted(set(gdl.all_active_sns()) | loaded)
     rows = []
     for sn in all_sns:
@@ -736,7 +747,7 @@ def populate_section_details(glider_sn, section_num):
 
     # Charts are driven by the glider's variable list in active.csv/active2.csv
     # so plots the glider doesn't carry are never rendered (no broken images).
-    gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=False)
+    gdl = get_gdl()
     chart_specs = section_chart_specs(gdl.section_variables(glider_sn), gdl.variable_names)
 
     # Mission link - always shown when glider is selected

@@ -12,7 +12,7 @@ from dash.exceptions import PreventUpdate
 import numpy as np
 import pandas as pd
 
-from data_loader import DEFAULT_DATA_DIR, GliderDataLoader, parse_mission_yyyymmm
+from data_loader import DEFAULT_DATA_DIR, GliderDataLoader, get_gdl, parse_mission_yyyymmm
 from utils import latlon_offset, load_map_region_config, load_region_labels, section_chart_specs
 from .layout import layout, TILE_URL
 from .names import MapIds, StoreIds, ControlIds, ContainerIds, TextIds, IntervalIds
@@ -172,7 +172,7 @@ def _viewport_for_default():
 
 
 def load_mapdata_from_source():
-    gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=False)
+    gdl = get_gdl()
     missions = {}
     data_mtimes = []
 
@@ -316,12 +316,24 @@ def _build_map_children(missions, year_range, uv_scale, uv_data, hidden=None):
             uv_lines = []
             for section, df_uv_sec in pd.DataFrame(uv_data["uv_records"]).groupby("section", sort=False):
                 opacity = opacity_by_section.get(int(section), 1.0)
-                for _, row in df_uv_sec.iterrows():
-                    lat, lon = row["lat"], row["lon"]
-                    vlat, ulon = latlon_offset(lat, lon, row["v"], row["u"], uv_scale)
+                lat = df_uv_sec["lat"].to_numpy()
+                lon = df_uv_sec["lon"].to_numpy()
+                vlat, ulon = latlon_offset(
+                    lat, lon, df_uv_sec["v"].to_numpy(), df_uv_sec["u"].to_numpy(), uv_scale
+                )
+                # One multi-segment polyline per section: each ray is its own
+                # [start, end] segment, so they render disconnected within a
+                # single layer instead of one Polyline component per vector.
+                segments = [
+                    [[la, lo], [vla, ulo]]
+                    for la, lo, vla, ulo in zip(
+                        lat.tolist(), lon.tolist(), vlat.tolist(), ulon.tolist()
+                    )
+                ]
+                if segments:
                     uv_lines.append(
                         dl.Polyline(
-                            positions=[[lat, lon], [vlat, ulon]],
+                            positions=segments,
                             color=color_hex,
                             opacity=opacity,
                             weight=1,
@@ -852,7 +864,7 @@ def update_uv_store(_n_clicks, mission_id):
         return {}
     if not mission_id:
         return {}
-    gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=False)
+    gdl = get_gdl()
     if not gdl.has_json(mission_id):
         return {}
     gdl.load_archived(mission_id)
@@ -874,7 +886,7 @@ def populate_section_details(mission_id, section_num):
 
     # Charts are driven by the mission's variable list in archive.csv/archive2.csv
     # so plots the mission doesn't carry are never rendered (no broken images).
-    gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=False)
+    gdl = get_gdl()
     chart_specs = section_chart_specs(gdl.section_variables(mission_id), gdl.variable_names)
 
     mission_link = html.Div(
