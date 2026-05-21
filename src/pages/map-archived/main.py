@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 
 from data_loader import DEFAULT_DATA_DIR, GliderDataLoader, parse_mission_yyyymmm
-from utils import load_map_region_config, load_region_labels, section_chart_specs
+from utils import latlon_offset, load_map_region_config, load_region_labels, section_chart_specs
 from .layout import layout, TILE_URL
 from .names import MapIds, StoreIds, ControlIds, ContainerIds, TextIds, IntervalIds
 
@@ -215,7 +215,7 @@ def load_mapdata_from_source():
     }
 
 
-def _build_map_children(missions, year_range, hidden=None):
+def _build_map_children(missions, year_range, uv_scale, uv_data, hidden=None):
     hidden_set = set(hidden or [])
     children = []
     region_items = []
@@ -304,6 +304,32 @@ def _build_map_children(missions, year_range, hidden=None):
                     ),
                 )
             )
+
+        # Depth-averaged current vectors for the one selected mission
+        # (skipped when no mission is chosen or the scale slider is off).
+        if (
+            uv_scale
+            and uv_data
+            and str(uv_data.get("mission_id")) == str(mission_id)
+            and uv_data.get("uv_records")
+        ):
+            uv_lines = []
+            for section, df_uv_sec in pd.DataFrame(uv_data["uv_records"]).groupby("section", sort=False):
+                opacity = opacity_by_section.get(int(section), 1.0)
+                for _, row in df_uv_sec.iterrows():
+                    lat, lon = row["lat"], row["lon"]
+                    vlat, ulon = latlon_offset(lat, lon, row["v"], row["u"], uv_scale)
+                    uv_lines.append(
+                        dl.Polyline(
+                            positions=[[lat, lon], [vlat, ulon]],
+                            color=color_hex,
+                            opacity=opacity,
+                            weight=1,
+                            interactive=False,
+                        )
+                    )
+            if uv_lines:
+                children.append(dl.LayerGroup(children=uv_lines, id=f"uv-{mission_id}"))
 
         end_row = df.iloc[-1]
         end_dt = dt.datetime.utcfromtimestamp(float(end_row["time"])) if np.isfinite(end_row["time"]) else None
@@ -639,11 +665,13 @@ def update_yearrange_store(year_range):
     Output(StoreIds.LEGEND_BOUNDS_STORE, "data"),
     Input(StoreIds.MAPDATA_STORE, "data"),
     Input(StoreIds.YEARRANGE_STORE, "data"),
+    Input(ControlIds.UV_SCALE, "value"),
+    Input(StoreIds.UV_STORE, "data"),
     Input(StoreIds.LEGEND_HIDDEN_STORE, "data"),
     State(StoreIds.LEGEND_OPEN_STORE, "data"),
     prevent_initial_call=False,
 )
-def update_map(store_data, year_range, hidden, open_regions):
+def update_map(store_data, year_range, uv_scale, uv_data, hidden, open_regions):
     store_data = store_data or {}
     missions = store_data.get("missions", {})
     tile = dl.TileLayer(url=TILE_URL)
@@ -652,14 +680,22 @@ def update_map(store_data, year_range, hidden, open_regions):
     if not missions:
         return [tile, zoom_ctrl], _viewport_for_default(), [], [], {}
 
-    data_children, bounds, region_items, gbounds = _build_map_children(missions, year_range, hidden=hidden)
+    data_children, bounds, region_items, gbounds = _build_map_children(
+        missions, year_range, uv_scale, uv_data, hidden=hidden
+    )
     if not data_children:
         data_children = [dl.LayerGroup(id="archive-map-loaded-placeholder")]
     all_children = [tile, zoom_ctrl] + data_children
     desktop_legend = _legend_children(region_items, scope="desktop", open_regions=open_regions)
     mobile_legend = _legend_children(region_items, scope="mobile", open_regions=open_regions)
 
-    if dash.ctx.triggered_id == StoreIds.LEGEND_HIDDEN_STORE:
+    # Selecting a UV glider or moving the scale slider only restyles vectors —
+    # keep the viewport put (re-zoom only on year-range / data changes).
+    if dash.ctx.triggered_id in (
+        StoreIds.LEGEND_HIDDEN_STORE,
+        StoreIds.UV_STORE,
+        ControlIds.UV_SCALE,
+    ):
         return all_children, no_update, desktop_legend, mobile_legend, gbounds
     if bounds:
         return all_children, _viewport_for_bounds(bounds), desktop_legend, mobile_legend, gbounds
@@ -737,12 +773,10 @@ def zoom_to_legend(_mission_clicks, _region_clicks, _master_clicks, gbounds):
     return _viewport_for_bounds(bounds)
 
 
-@app.callback(
-    Output(ControlIds.GLIDER_SELECT, "options"),
-    Input(StoreIds.MAPDATA_STORE, "data"),
-    Input(ControlIds.GLIDER_SELECT, "search_value"),
-)
-def set_glider_options(store_data, search_value):
+def _mission_dropdown_options(store_data, search_value):
+    """Build mission-dropdown options (label with region + date, disabled when
+    no local data). Shared by the Section Details and current-vector dropdowns.
+    """
     store_data = store_data or {}
     missions = store_data.get("missions", {})
     rows = []
@@ -780,6 +814,50 @@ def set_glider_options(store_data, search_value):
         }
         for disabled, mission_id, region_lbl, date_label, search_text in rows
     ]
+
+
+@app.callback(
+    Output(ControlIds.GLIDER_SELECT, "options"),
+    Input(StoreIds.MAPDATA_STORE, "data"),
+    Input(ControlIds.GLIDER_SELECT, "search_value"),
+)
+def set_glider_options(store_data, search_value):
+    return _mission_dropdown_options(store_data, search_value)
+
+
+@app.callback(
+    Output(ControlIds.UV_PLOT_BTN, "disabled"),
+    Input(ControlIds.GLIDER_SELECT, "value"),
+)
+def toggle_uv_button(mission_id):
+    # The button can only request vectors when a mission is selected.
+    return not mission_id
+
+
+@app.callback(
+    Output(StoreIds.UV_STORE, "data"),
+    Input(ControlIds.UV_PLOT_BTN, "n_clicks"),
+    Input(ControlIds.GLIDER_SELECT, "value"),
+    prevent_initial_call=True,
+)
+def update_uv_store(_n_clicks, mission_id):
+    """Plot / clear depth-averaged current vectors for the Section Details mission.
+
+    Clicking the button loads vectors for the currently selected mission.
+    Changing the mission selection clears any plotted vectors, so the map never
+    shows currents that don't match the selected mission. Only the one selected
+    mission's vectors are ever built and shipped to the browser.
+    """
+    if dash.ctx.triggered_id == ControlIds.GLIDER_SELECT:
+        return {}
+    if not mission_id:
+        return {}
+    gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=False)
+    if not gdl.has_json(mission_id):
+        return {}
+    gdl.load_archived(mission_id)
+    uv_df = gdl.build_uv_df(mission_id).dropna(subset=["lat", "lon", "u", "v"])
+    return {"mission_id": str(mission_id), "uv_records": uv_df.to_dict("records")}
 
 
 @app.callback(

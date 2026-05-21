@@ -9,6 +9,7 @@ class MapIds:
 class StoreIds:
     MAPDATA_STORE = PREFIX + "map-store"
     YEARRANGE_STORE = PREFIX + "year-range-store"
+    UV_STORE = PREFIX + "uv-store"
     LEGEND_BOUNDS_STORE = PREFIX + "legend-bounds-store"
     LEGEND_HIDDEN_STORE = PREFIX + "legend-hidden-store"
     LEGEND_OPEN_STORE = PREFIX + "legend-open-store"
@@ -16,6 +17,8 @@ class StoreIds:
 
 class ControlIds:
     YEAR_RANGE = PREFIX + "year-range"
+    UV_SCALE = PREFIX + "uv-scale-factor"
+    UV_PLOT_BTN = PREFIX + "uv-plot-btn"
     GLIDER_SELECT = PREFIX + "glider-select"
     SECTION_SELECT = PREFIX + "section-select"
 

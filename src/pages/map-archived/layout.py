@@ -56,6 +56,21 @@ def options_div():
     )
 
 
+def uv_scale_div():
+    return html.Div(
+        dcc.Slider(
+            id=ControlIds.UV_SCALE,
+            min=0,
+            max=2,
+            step=0.1,
+            value=1.0,
+            marks={0: "off", 0.5: "long", 1.0: "", 1.5: "short", 2: ""},
+            tooltip={"placement": "bottom", "always_visible": False},
+        ),
+        className="mt-2 mb-2",
+    )
+
+
 def section_details_div():
     return html.Div(
         [
@@ -91,6 +106,16 @@ def section_details_div():
                 className="g-2",
                 align="end",
             ),
+            dbc.Button(
+                "Plot Depth-Average Currents",
+                id=ControlIds.UV_PLOT_BTN,
+                size="sm",
+                color="secondary",
+                outline=True,
+                disabled=True,
+                n_clicks=0,
+                className="w-100 mt-2",
+            ),
             html.Div(
                 "Select a mission and section to see details.",
                 id=TextIds.SECTION_DETAILS_TEXT,
@@ -113,6 +138,7 @@ def float_box():
     accordion = dbc.Accordion(
         [
             dbc.AccordionItem(options_div(), title="Year Range"),
+            dbc.AccordionItem(uv_scale_div(), title="Depth-Average Current Scale"),
             dbc.AccordionItem(section_details_div(), title="Section Details", item_id=ContainerIds.SECTION_DETAILS),
             dbc.AccordionItem(
                 html.Div(id=ContainerIds.MAP_LEGEND_MOBILE, className="archive-map-legend archive-map-legend-mobile"),
@@ -186,6 +212,7 @@ def main_layout():
             dcc.Location(id="archive-url", refresh=False),
             dcc.Store(id=StoreIds.MAPDATA_STORE, storage_type="memory", data={}),
             dcc.Store(id=StoreIds.YEARRANGE_STORE, storage_type="memory", data=[_min_year, _max_year]),
+            dcc.Store(id=StoreIds.UV_STORE, storage_type="memory", data={}),
             dcc.Store(id=StoreIds.LEGEND_BOUNDS_STORE, storage_type="memory", data={}),
             dcc.Store(id=StoreIds.LEGEND_HIDDEN_STORE, storage_type="memory", data=[]),
             dcc.Store(id=StoreIds.LEGEND_OPEN_STORE, storage_type="memory", data=[]),
