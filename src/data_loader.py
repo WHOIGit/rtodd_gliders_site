@@ -62,8 +62,8 @@ def _safe_json_attr(obj, attr: str, default):
 class GliderDataLoader:
     """Loads glider deployment data from data/netcdf/*.nc files."""
 
-    INSTRUMENT_KEYS = {'ctd', 'opt', 'dox', 'ph'}
-    INSTRUMENT_NAMES = {'ctd': 'CTD', 'opt': 'OPT', 'dox': 'DOX', 'ph': 'PH'}
+    INSTRUMENT_KEYS = {'ctd', 'opt', 'dox', 'ph', 'adcp'}
+    INSTRUMENT_NAMES = {'ctd': 'CTD', 'opt': 'OPT', 'dox': 'DOX', 'ph': 'PH', 'adcp': 'ADCP'}
     PROFILE_READ_CHUNK_DIVES = 16
 
     def __init__(

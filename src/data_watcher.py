@@ -27,7 +27,7 @@ POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "300"))
 
 TRACK_KEYS = {"mission", "glider_version", "time", "lat", "lon", "u", "v"}
 TRACK_PAIR_KEYS = {"time", "lat", "lon"}
-INSTRUMENT_KEYS = {"ctd", "opt", "dox", "ph"}
+INSTRUMENT_KEYS = {"ctd", "opt", "dox", "ph", "adcp"}
 COMPRESSION = dict(zlib=True, shuffle=True, complevel=4)
 TRACKS_SCHEMA_VERSION = "gliderapp-tracks-v1"
 
