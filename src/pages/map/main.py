@@ -1,4 +1,3 @@
-from itertools import cycle
 import logging
 import time
 import datetime as dt
@@ -233,14 +232,25 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, hidden
       legend_items: list of (glider_sn, color_hex) in display order
       per_glider_bounds: dict[sn, [[s,w],[n,e]]] for legend click-to-zoom
     """
-    COLOR_CYCLE = cycle([
+    COLOR_PALETTE = [
         ( 31, 119, 180), # blue
         (255, 127,  14), # orange
         ( 44, 160,  44), # green
         (214,  39,  40), # red
         (148, 103, 189), # purple
         (140,  86,  75), # brown
-    ])
+    ]
+
+    # Assign each glider a stable color keyed by its serial number. Recency
+    # (sorted_gliders, below) still controls draw and legend order, but color
+    # must NOT depend on that order: an interval refresh can reorder gliders by
+    # most-recent timestamp, and if color followed that order the tracks would
+    # recolor while already-rendered vector layers kept their old color — the
+    # "mismatched track/vector colors" seen after the map sits idle.
+    color_by_sn = {
+        sn: rgb_to_hex(*COLOR_PALETTE[i % len(COLOR_PALETTE)])
+        for i, sn in enumerate(sorted(latlon_records))
+    }
 
     hidden_set = set(hidden or [])
     children = []
@@ -258,8 +268,7 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, hidden
     )
 
     for glider_sn, records in sorted_gliders:
-        color_rgb = next(COLOR_CYCLE)
-        color_hex = rgb_to_hex(*color_rgb)
+        color_hex = color_by_sn[glider_sn]
 
         df = pd.DataFrame(records)
         df['dt'] = df.time.apply(lambda x: pd.NaT if np.isnan(x) else dt.datetime.utcfromtimestamp(x/1))
