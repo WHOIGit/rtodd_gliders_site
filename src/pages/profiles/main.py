@@ -617,7 +617,9 @@ def update_data_plot(inst_store, x_col, y_col, color_col, click_store, selection
             tv, tt = time_ticks(y_vals.min(), y_vals.max(), fmt="s", n_min=4, n_max=8)
             fig.update_yaxes(tickvals=tv, ticktext=tt)
 
-    if y_col == "depth":
+    # Vertical coordinates that increase downward — keep the surface (light /
+    # shallow water, i.e. small values) at the top of the plot.
+    if y_col in ("depth", "p", "rho", "sigma"):
         fig.update_yaxes(autorange="reversed")
 
     return fig
