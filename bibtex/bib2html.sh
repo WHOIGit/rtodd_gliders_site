@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 # This script converts a BibTeX file to an HTML file
 # using Pandoc and a custom reformatting script.
 
@@ -21,5 +23,4 @@ pandoc "$SCRIPTROOT/frontmatter.md" --bibliography="$INPUTBIB" --csl="$SCRIPTROO
 #  (2) neatens the doi links
 #  (3) Bolds
 python3 "$SCRIPTROOT/reformat.py" "$OUTPUTHTML" --bold "$SCRIPTROOT/input/bold_authors.txt" --rm-html-body -o "$OUTPUTHTML"
-
 

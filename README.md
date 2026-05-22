@@ -17,8 +17,7 @@ git fetch && git pull
 docker compose up --build --force-recreate -d
 ```
 
-This builds a Python 3.12 image, installs dependencies, and starts gunicorn on port 8050.
-The container restarts automatically unless explicitly stopped.
+This builds a Python 3.12 image, installs dependencies, starts the Dash app with gunicorn on port 8050, runs the `data-watcher` ingest process, and starts the GoatCounter analytics service. The containers restart automatically unless explicitly stopped.
 
 If the codebase changes, these are also the steps needed to deploy the code changes.
 
@@ -26,8 +25,8 @@ If the codebase changes, these are also the steps needed to deploy the code chan
 
 - **Port:** 8050
 - **WSGI server:** gunicorn
-- **Volumes:** `/srv/data` is mounted at `/app/data` (read-only for the app, read-write for `data-watcher` so it can write the NetCDF cache); `./config` is mounted at `/app/config` read-only
-- **Environment:** both Compose services load required production settings from `prod.env`
+- **Volumes:** `gliderapp` mounts `/srv/data` at `/app/data` read-only and `./config` at `/app/config` read-only. `data-watcher` mounts `/srv/data/sync` read-only and `/srv/data/netcdf` read-write so it can maintain the NetCDF cache. `goatcounter` stores analytics data in `/srv/data/analytics`.
+- **Environment:** `gliderapp` and `data-watcher` load required production settings from `prod.env`
 
 ## Configuration
 
@@ -36,8 +35,8 @@ Changes take effect after restarting the container (`docker compose up --force-r
 
 | File | Purpose |
 |------|---------|
-| `config/homepage.html` | Home page content (rendered as raw HTML) |
-| `config/datapage.html` | Data page content (rendered as raw HTML) |
+| `config/homepage.html` | Home page content (rendered as sanitized HTML) |
+| `config/datapage.html` | Data page content (rendered as sanitized HTML) |
 | `config/people.yml` | Team members — names, roles, emails, websites, and portrait image filenames |
 | `config/assets/people-imgs/` | Portrait images referenced by `people.yml` |
 | `config/map_config.yml` | Map region definitions (labels, enable flags, glider marker image) |
@@ -45,32 +44,39 @@ Changes take effect after restarting the container (`docker compose up --force-r
 
 ### Environment variables
 
-Production settings are committed in `prod.env` and loaded by both Compose services.
+Production settings are committed in `prod.env` and loaded by `gliderapp` and
+`data-watcher`.
 Update `prod.env` when deployment defaults change.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PROD` | `1` | Enables production routing (`/dashapp/` prefix) |
+| `PROD` | `1` | Enables production Dash routing settings |
 | `DEBUG` | `0` | Debug mode |
-| `SUBPATH` | `/dashapp` | External URL prefix used for Dash requests, nav links, and static HTML asset paths |
+| `SUBPATH` | empty | External URL prefix used for Dash requests, nav links, and static HTML asset paths. Empty means the app is served at the site root. |
 | `PORTRAITS_DEFAULT` | `default.jpg` | Fallback portrait image |
 | `PUBLICATIONS_HTML_PATH` | `config/publications.html` | Path to publications HTML |
 | `HOME_HTML_PATH` | `config/homepage.html` | Path to home page HTML |
 | `DATAPAGE_HTML_PATH` | `config/datapage.html` | Path to data page HTML |
-| `DATA_DIR` | `/app/data/sync` | Source glider JSON directory for `data-watcher` |
+| `DATA_DIR` | `/app/data/sync` | Source `*_web.json` directory for `data-watcher`; defaults to `./data/sync` for the app when unset |
 | `NETCDF_DIR` | `/app/data/netcdf` | Generated NetCDF cache directory for `data-watcher` and the app |
 | `TRACKS_NETCDF` | `tracks.nc` | Aggregate tracks-only NetCDF used for map loading |
 | `POLL_INTERVAL` | `300` | Seconds between `data-watcher` source scans |
+| `ANALYTICS_ENDPOINT` | `https://analytics.gliders.whoi.edu` | GoatCounter endpoint. Leave unset to disable analytics injection. |
 
 ## Local Development
 
-Run the app directly with Python (no Docker needed):
+Install dependencies, then run the app directly with Python:
 
 ```bash
+python -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
 PROD=0 DEBUG=1 python src/app.py
 ```
 
-The app will be available at `http://localhost:8050`.
+The app will be available at `http://localhost:8050`. By default, local runs
+look for source data in `./data/sync` and NetCDF cache files in `./data/netcdf`;
+set `DATA_DIR` and `NETCDF_DIR` if your local data lives elsewhere.
 
 ## BibTeX Module
 
