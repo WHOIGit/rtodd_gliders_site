@@ -19,8 +19,6 @@ def make_navbar() -> dbc.Navbar:
     """
     Top navigation bar with manual structure including Plotting dropdown.
     """
-    # TODO WHOI image
-
     prod_env = os.environ.get('PROD', 'False').lower() in ("true", "1")
     subpath = os.environ.get("SUBPATH", "/dashapp" if prod_env else "").rstrip("/")
 

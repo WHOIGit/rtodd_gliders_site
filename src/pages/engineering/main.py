@@ -433,7 +433,7 @@ def update_dive_fig(dive_num, glider_store):
         **scatter_kw), row=3, col=1)
     fig.add_trace(go.Scatter(x=x, y=p,     name="pressure",
         customdata=customdata,
-        hovertemplate="%{customdata[1]}<br>Dive Time: %{customdata[0]}<br>Pressure: %{y:.1f}°<extra></extra>",
+        hovertemplate="%{customdata[1]}<br>Dive Time: %{customdata[0]}<br>Pressure: %{y:.1f} db<extra></extra>",
         **scatter_kw), row=4, col=1)
 
     # --- Y-axis defaults ---

@@ -1,6 +1,6 @@
 # Deployment
 
-Production deployment of GliderApp lives on the **racing** VM. This document describes the host setup, access model, and the operational commands used to deploy and update the app.
+Production deployment of GliderApp lives on the **racing** VM. The canonical public site is `https://gliders.whoi.edu/`. This document describes the host setup, access model, Apache vhosts, data paths, and the operational commands used to deploy and update the app.
 
 ## Host & install location
 
@@ -57,8 +57,9 @@ The app runs under Docker Compose (`compose.yml`). Three services are defined:
 - `data-watcher` — background ingest from `/srv/data/sync` into `/srv/data/netcdf`
 - `goatcounter` — self-hosted web analytics (see [Analytics](#analytics-goatcounter) below)
 
-`gliderapp` and `data-watcher` share the `gliderapp:latest` image built from the
-repo's `Dockerfile`. `goatcounter` uses the upstream `arp242/goatcounter` image.
+`gliderapp` and `data-watcher` share the `gliderapp:latest` image built from the repo's `Dockerfile`. `goatcounter` uses the upstream `arp242/goatcounter` image.
+
+Apache is the public entrypoint. It terminates TLS for `gliders.whoi.edu`, serves the legacy `/data/` tree directly from disk, and proxies Dash routes to the `gliderapp` container on `127.0.0.1:8050`.
 
 ### Standard deploy / update
 
@@ -119,6 +120,31 @@ docker compose down        # stop everything
 
 Changes to files in `config/` take effect on the next container restart (or immediately for files re-read on each request, depending on the code path).
 
+## Apache vhosts
+
+Reference Apache configs live in the repo under `apache/`:
+
+- `apache/gliders.whoi.edu.conf` — canonical public site, Dash reverse proxy, and direct `/data/` static serving.
+- `apache/analytics.gliders.whoi.edu.conf` — GoatCounter reverse proxy.
+
+On `racing`, keep the live Apache site files symlinked to the repo copies so changes are versioned with the application:
+
+```sh
+sudo ln -s /opt/gliderapp/apache/gliders.whoi.edu.conf \
+  /etc/apache2/sites-available/gliders.whoi.edu.conf
+sudo ln -s /opt/gliderapp/apache/analytics.gliders.whoi.edu.conf \
+  /etc/apache2/sites-available/analytics.gliders.whoi.edu.conf
+
+sudo a2ensite gliders.whoi.edu.conf
+sudo a2ensite analytics.gliders.whoi.edu.conf
+sudo apache2ctl configtest
+sudo systemctl reload apache2
+```
+
+Required Apache modules include `ssl`, `headers`, `rewrite`, `proxy`, and `proxy_http`. Enable any missing modules with `sudo a2enmod <module>`, then run `sudo apache2ctl configtest` and reload Apache.
+
+TLS uses the Let's Encrypt lineage at `/etc/letsencrypt/live/gliders.whoi.edu/`. The certificate must cover both `gliders.whoi.edu` and `analytics.gliders.whoi.edu`.
+
 ## Data volumes
 
 Host paths mounted into the containers:
@@ -132,6 +158,14 @@ Host paths mounted into the containers:
 | `/srv/data/analytics`   | `/home/goatcounter/goatcounter-data` | goatcounter   | rw   |
 
 `/srv/data` is managed outside this repo; the data-watcher is the writer for `netcdf/`, and the web app reads everything under `/srv/data` read-only. `analytics/` holds GoatCounter's SQLite database — it sits under `/srv/data` for convenience but is written only by the `goatcounter` container, not by the app.
+
+The public `https://gliders.whoi.edu/data/` path is separate from the Dash app. Apache serves it directly from the legacy host directory:
+
+```text
+/var/www/gliders.whoi.edu/data
+```
+
+That tree contains static mission pages, plot images, and directory indexes that are updated by external processing outside this repo. The Dash app intentionally links to files under `/data/` for section details and all-plots pages, so the main Apache vhost excludes `/data/` from proxying.
 
 ## Analytics (GoatCounter)
 
@@ -162,9 +196,7 @@ Site traffic is tracked by a self-hosted [GoatCounter](https://www.goatcounter.c
    docker compose up -d goatcounter
    ```
 
-4. **Create the analytics site and the first admin user.** With `-it` the
-   password is prompted interactively (kept out of shell history). The image
-   is minimal and has no shell, so run `goatcounter` directly — not via `bash`:
+4. **Create the analytics site and the first admin user.** With `-it` the password is prompted interactively (kept out of shell history). The image is minimal and has no shell, so run `goatcounter` directly — not via `bash`:
 
    ```sh
    docker compose exec -it goatcounter goatcounter db create site \
@@ -182,14 +214,12 @@ Site traffic is tracked by a self-hosted [GoatCounter](https://www.goatcounter.c
 
    (Run `goatcounter db create user -h` if the flags differ in the installed version.) Both `rtodd` and `sbatchelder` should be created as admins.
 
-6. **Apache vhost** — a reference copy of the site config lives in the repo at
-   [`apache/analytics.gliders.whoi.edu.conf`](apache/analytics.gliders.whoi.edu.conf).
-   Install it on `racing`:
+6. **Apache vhost** — a reference copy of the site config lives in the repo at [`apache/analytics.gliders.whoi.edu.conf`](apache/analytics.gliders.whoi.edu.conf). Install it on `racing`:
 
    ```sh
-   sudo cp apache/analytics.gliders.whoi.edu.conf \
+   sudo ln -sf /opt/gliderapp/apache/analytics.gliders.whoi.edu.conf \
      /etc/apache2/sites-available/analytics.gliders.whoi.edu.conf
-   sudo a2ensite analytics.gliders.whoi.edu
+   sudo a2ensite analytics.gliders.whoi.edu.conf
    sudo apache2ctl configtest
    sudo systemctl reload apache2
    ```

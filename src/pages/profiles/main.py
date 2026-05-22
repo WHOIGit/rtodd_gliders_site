@@ -452,8 +452,8 @@ def build_instrument_data(instrument_name, selection, glider_sn, current_x, curr
     if shown_points < raw_points:
         reduction = 100 * (1 - shown_points / raw_points)
         warning = (
-            "Excessive dive-selection data-volume notice. "
-            f"{_format_large_datapoint_count(raw_points)} datapoints decimated {reduction:.0f}%. "
+            "Excessive dive-selection notice. "
+            f"{_format_large_datapoint_count(raw_points)} data points decimated {reduction:.0f}%. "
             "Plot loading may take a minute."
         )
         warning_open = True
