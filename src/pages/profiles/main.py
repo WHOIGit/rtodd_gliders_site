@@ -53,7 +53,7 @@ dash.register_page(
 
 app = dash.get_app()
 
-MAX_PROFILE_POINTS = 200_000
+MAX_PROFILE_POINTS = 20_000
 
 # ArcGIS ocean basemap config (same as map page)
 _map_tile_layer = dict(
