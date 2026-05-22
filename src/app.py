@@ -9,7 +9,7 @@ import dash
 import dash_bootstrap_components as dbc
 from flask import send_from_directory, abort
 
-from layout import create_layout
+from layout import create_layout, register_callbacks
 from names import *
 from utils import CONFIG_ASSETS_DIR, CONFIG_ASSETS_URL_PREFIX, PORTRAITS_DIR, PORTRAITS_URL_PREFIX
 
@@ -42,8 +42,41 @@ app = dash.Dash(
 )
 app.title = "Glider Dashboard"
 
+# --- GoatCounter analytics -------------------------------------------------
+# When ANALYTICS_ENDPOINT is set, inject the self-hosted GoatCounter tracker.
+# `no_onload` disables count.js's automatic pageview; instead the clientside
+# callback in layout.py counts every route — including the initial load — so
+# Dash's client-side page changes are tracked exactly once each.
+ANALYTICS_ENDPOINT = os.environ.get("ANALYTICS_ENDPOINT", "").rstrip("/")
+if ANALYTICS_ENDPOINT:
+    app.index_string = """<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <script>window.goatcounter = {no_onload: true}</script>
+        <script data-goatcounter=\"""" + ANALYTICS_ENDPOINT + """/count"
+                async src=\"""" + ANALYTICS_ENDPOINT + """/count.js"></script>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>"""
+
 # Use function-based layout (nice for larger apps)
 app.layout = create_layout
+
+# Register layout-level clientside callbacks exactly once. Must happen here,
+# not inside create_layout(), since Dash re-runs a function-based layout on
+# every page load.
+register_callbacks()
 
 server = app.server
 

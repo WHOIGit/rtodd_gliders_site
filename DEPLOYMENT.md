@@ -51,12 +51,14 @@ The repo's `origin` remote uses the `github-gliderapp` host alias so pulls alway
 
 ## Running the app
 
-The app runs under Docker Compose (`compose.yml`). Two services are defined:
+The app runs under Docker Compose (`compose.yml`). Three services are defined:
 
 - `gliderapp` — the Dash web app, exposed on host port `8050`
 - `data-watcher` — background ingest from `/srv/data/sync` into `/srv/data/netcdf`
+- `goatcounter` — self-hosted web analytics (see [Analytics](#analytics-goatcounter) below)
 
-Both share the `gliderapp:latest` image built from the repo's `Dockerfile`.
+`gliderapp` and `data-watcher` share the `gliderapp:latest` image built from the
+repo's `Dockerfile`. `goatcounter` uses the upstream `arp242/goatcounter` image.
 
 ### Standard deploy / update
 
@@ -121,11 +123,88 @@ Changes to files in `config/` take effect on the next container restart (or imme
 
 Host paths mounted into the containers:
 
-| Host path           | Container path       | Service       | Mode |
-|---------------------|----------------------|---------------|------|
-| `/srv/data/sync`    | `/app/data/sync`     | data-watcher  | ro   |
-| `/srv/data/netcdf`  | `/app/data/netcdf`   | data-watcher  | rw   |
-| `/srv/data`         | `/app/data`          | gliderapp     | ro   |
-| `./config`          | `/app/config`        | gliderapp     | ro   |
+| Host path             | Container path                       | Service       | Mode |
+|-----------------------|--------------------------------------|---------------|------|
+| `/srv/data/sync`      | `/app/data/sync`                     | data-watcher  | ro   |
+| `/srv/data/netcdf`    | `/app/data/netcdf`                   | data-watcher  | rw   |
+| `/srv/data`           | `/app/data`                          | gliderapp     | ro   |
+| `./config`            | `/app/config`                        | gliderapp     | ro   |
+| `/srv/data/analytics`   | `/home/goatcounter/goatcounter-data` | goatcounter   | rw   |
 
-`/srv/data` is managed outside this repo; the data-watcher is the writer for `netcdf/`, and the web app reads everything under `/srv/data` read-only.
+`/srv/data` is managed outside this repo; the data-watcher is the writer for `netcdf/`, and the web app reads everything under `/srv/data` read-only. `analytics/` holds GoatCounter's SQLite database — it sits under `/srv/data` for convenience but is written only by the `goatcounter` container, not by the app.
+
+## Analytics (GoatCounter)
+
+Site traffic is tracked by a self-hosted [GoatCounter](https://www.goatcounter.com/) instance — privacy-friendly, cookieless, no third-party (e.g. Google) involvement. It runs as the `goatcounter` service in `compose.yml`.
+
+### How it fits together
+
+- The container listens HTTP-only on `127.0.0.1:8051` (loopback — not directly reachable from the network).
+- Apache serves `analytics.gliders.whoi.edu`, terminates TLS, and reverse-proxies to that port. The GoatCounter dashboard (and its login) lives there — that login *is* the analytics admin page.
+- The tracking snippet is injected into every page by `src/app.py` when `ANALYTICS_ENDPOINT` is set in `prod.env`. A clientside callback in `src/layout.py` counts each Dash route change (Dash navigation is client-side, so a plain onload counter would miss it).
+- The SQLite database is stored on the host at `/srv/data/analytics`.
+
+### First-time setup
+
+1. **DNS** — create an `A` record for `analytics.gliders.whoi.edu` pointing at `racing`.
+
+2. **Data directory** — create the host directory and give the container's user write access. The `arp242/goatcounter` image runs as a non-root user; find its uid/gid and chown to match:
+
+   ```sh
+   docker run --rm arp242/goatcounter id        # note the uid:gid
+   sudo mkdir -p /srv/data/analytics
+   sudo chown <uid>:<gid> /srv/data/analytics
+   ```
+
+3. **Start the container:**
+
+   ```sh
+   docker compose up -d goatcounter
+   ```
+
+4. **Create the analytics site and the first admin user.** With `-it` the
+   password is prompted interactively (kept out of shell history). The image
+   is minimal and has no shell, so run `goatcounter` directly — not via `bash`:
+
+   ```sh
+   docker compose exec -it goatcounter goatcounter db create site \
+     -vhost=analytics.gliders.whoi.edu \
+     -user.email=<first-admin-email>
+   ```
+
+5. **Add the second admin user:**
+
+   ```sh
+   docker compose exec -it goatcounter goatcounter db create user \
+     -site=analytics.gliders.whoi.edu \
+     -email=<second-admin-email> -access=admin
+   ```
+
+   (Run `goatcounter db create user -h` if the flags differ in the installed version.) Both `rtodd` and `sbatchelder` should be created as admins.
+
+6. **Apache vhost** — a reference copy of the site config lives in the repo at
+   [`apache/analytics.gliders.whoi.edu.conf`](apache/analytics.gliders.whoi.edu.conf).
+   Install it on `racing`:
+
+   ```sh
+   sudo cp apache/analytics.gliders.whoi.edu.conf \
+     /etc/apache2/sites-available/analytics.gliders.whoi.edu.conf
+   sudo a2ensite analytics.gliders.whoi.edu
+   sudo apache2ctl configtest
+   sudo systemctl reload apache2
+   ```
+
+   TLS uses the shared Let's Encrypt certificate:
+
+   - Certificate: `/etc/letsencrypt/live/gliders.whoi.edu/fullchain.pem`
+   - Private key: `/etc/letsencrypt/live/gliders.whoi.edu/privkey.pem`
+
+   This certbot lineage **must include `analytics.gliders.whoi.edu` as a SAN** — if it currently covers only `gliders.whoi.edu`, expand it (e.g. re-run certbot with `-d gliders.whoi.edu -d analytics.gliders.whoi.edu`) before reloading Apache.
+
+   `ProxyPreserveHost On` is required so GoatCounter sees the `analytics.gliders.whoi.edu` host and matches the site; `X-Forwarded-Proto` tells it the public connection is HTTPS.
+
+### Day-to-day
+
+- View analytics: log in at `https://analytics.gliders.whoi.edu`.
+- `-automigrate` in `compose.yml` applies schema migrations automatically when the image is updated (`docker compose pull goatcounter && docker compose up -d goatcounter`).
+- To disable tracking (e.g. local dev), leave `ANALYTICS_ENDPOINT` unset in the environment — the snippet is then not injected.
