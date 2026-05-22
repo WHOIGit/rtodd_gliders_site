@@ -11,6 +11,7 @@ INPUTBIB=$(realpath "$1")
 
 # Output: An HTML file generated from the BibTeX file.
 OUTPUTHTML=${2:-"$SCRIPTROOT/output/publications.html"}
+mkdir -p "$(dirname "$OUTPUTHTML")"
 echo "$OUTPUTHTML"
 
 # pandoc is a program that can convert between various document formats
@@ -23,4 +24,3 @@ pandoc "$SCRIPTROOT/frontmatter.md" --bibliography="$INPUTBIB" --csl="$SCRIPTROO
 #  (2) neatens the doi links
 #  (3) Bolds
 python3 "$SCRIPTROOT/reformat.py" "$OUTPUTHTML" --bold "$SCRIPTROOT/input/bold_authors.txt" --rm-html-body -o "$OUTPUTHTML"
-
