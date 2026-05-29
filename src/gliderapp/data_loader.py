@@ -175,7 +175,7 @@ class GliderDataLoader:
             missing_in_sec = expected_keys - seen
             extra_in_sec = seen - expected_keys
             for k in missing_in_sec:
-                logger.info(f"{k} is in {label} csv but missing from {name}; assuming single (1, inf) section")
+                logger.debug(f"{k} is in {label} csv but missing from {name}; assuming single (1, inf) section")
                 target.setdefault(k, [(1, float('inf'))])
             for k in extra_in_sec:
                 logger.debug(f"{k} is in {name} but missing from {label} csv")
