@@ -36,6 +36,14 @@ Apache serves `https://gliders.whoi.edu/` publicly and proxies Dash requests to 
 - **Volumes:** `gliderapp` mounts `/srv/data` at `/app/data` read-only and `./config` at `/app/config` read-only. `data-watcher` mounts `/srv/data/sync` read-only and `/srv/data/netcdf` read-write so it can maintain the NetCDF cache. `goatcounter` stores analytics data in `/srv/data/analytics`.
 - **Environment:** `gliderapp` and `data-watcher` load required production settings from `prod.env`
 
+### Analytics
+
+Page views are tracked by a self-hosted [GoatCounter](https://www.goatcounter.com/) instance, served publicly at `https://analytics.gliders.whoi.edu/`.
+
+- The `goatcounter` container (image `arp242/goatcounter:2.7.0`) listens HTTP-only on port `8080` inside the container, published to `127.0.0.1:8051` on the host. A dedicated Apache vhost for `analytics.gliders.whoi.edu` terminates TLS and reverse-proxies plain HTTP to it.
+- The SQLite database lives at `/srv/data/analytics` (mounted to `/home/goatcounter/goatcounter-data`), so it survives container recreation. Pending schema migrations are applied automatically on startup (`-automigrate`).
+- The Dash app injects the GoatCounter tracker script when the `ANALYTICS_ENDPOINT` environment variable is set (default `https://analytics.gliders.whoi.edu`). Leave it unset to disable analytics. The tracker counts every route change — including the initial load — exactly once via a clientside callback in `layout.py`.
+
 ## Configuration
 
 Config files live in `config/` and are mounted into the container at runtime. 
