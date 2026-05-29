@@ -8,6 +8,7 @@ class StoreIds:
     TIMEBTN_ACTIVE_STORE = "time-btn-active-store"
     REGION_ACTIVE_STORE = "region-active-store"
     LEGEND_BOUNDS_STORE = "legend-bounds-store"
+    SECTION_BOUNDS_STORE = "section-bounds-store"
     LEGEND_HIDDEN_STORE = "legend-hidden-store"
 
 class ControlIds:
@@ -24,6 +25,7 @@ class ControlIds:
     REGION_SELECT = "region-select"
     GLIDER_SELECT = "glider-select"
     SECTION_SELECT = "section-select"
+    SECTION_ZOOM_BTN = "section-zoom-btn"
 
 
 class ContainerIds:

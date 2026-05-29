@@ -57,6 +57,13 @@ def _latest_record_time(records):
     )
 
 
+def _section_key(section):
+    try:
+        return str(int(section))
+    except (TypeError, ValueError):
+        return str(section)
+
+
 from .layout import layout, TILE_URL
 from names import *
 from .names import *
@@ -242,11 +249,12 @@ GLIDER_ICON = dict(
 def _build_map_children(latlon_records, uv_records, time_range, uv_scale, hidden=None):
     """Build dash-leaflet children, bounds, and legend for the map.
 
-    Returns (children, bounds, legend_items, per_glider_bounds) where:
+    Returns (children, bounds, legend_items, per_glider_bounds, per_section_bounds) where:
       children: list of dl components (Polyline, Marker, LayerGroup)
       bounds: [[south, west], [north, east]] or None — overall fit bounds
       legend_items: list of (glider_sn, color_hex) in display order
       per_glider_bounds: dict[sn, [[s,w],[n,e]]] for legend click-to-zoom
+      per_section_bounds: dict[sn][section], filtered to the rendered records
     """
     COLOR_PALETTE = [
         ( 31, 119, 180), # blue
@@ -272,6 +280,7 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, hidden
     children = []
     legend_items = []  # all gliders, with a `hidden` flag
     per_glider_bounds = {}
+    per_section_bounds = {}
     maxlat, minlat, maxlon, minlon = -180, 180, -180, 180
 
     sorted_gliders = sorted(
@@ -305,6 +314,10 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, hidden
             continue
 
         opacity_by_section = section_opacity_by_section(df["section"])
+        per_section_bounds[str(glider_sn)] = {
+            _section_key(section): _bounds_for_records(df_sec.to_dict("records"))
+            for section, df_sec in df.groupby("section", sort=False)
+        }
 
         is_hidden = str(glider_sn) in hidden_set
         legend_items.append((glider_sn, color_hex, is_hidden))
@@ -432,10 +445,10 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, hidden
     if not children:
         # No visible tracks — still surface the legend so users can re-show.
         bounds_or_none = None
-        return [], bounds_or_none, legend_items, per_glider_bounds
+        return [], bounds_or_none, legend_items, per_glider_bounds, per_section_bounds
 
     bounds = [[minlat, minlon], [maxlat, maxlon]]
-    return children, bounds, legend_items, per_glider_bounds
+    return children, bounds, legend_items, per_glider_bounds, per_section_bounds
 
 
 def _viewport_for_bounds(bounds):
@@ -466,6 +479,35 @@ def _bounds_for_region_selection(region_key, gbounds, region_by_glider, hidden):
     return _merge_bounds(gbounds.get(sn) for sn in sns)
 
 
+def _bounds_for_records(records, section_num=None, time_range=None):
+    points = []
+    for record in records or []:
+        if section_num is not None and record.get("section") != section_num:
+            try:
+                if int(record.get("section")) != int(section_num):
+                    continue
+            except (TypeError, ValueError):
+                continue
+        if time_range and record.get("time") is not None:
+            try:
+                record_time = float(record["time"])
+            except (TypeError, ValueError):
+                continue
+            start, end = time_range
+            if record_time < start or (end is not None and record_time > end):
+                continue
+        lat = _finite_number(record.get("lat"))
+        lon = _finite_number(record.get("lon"))
+        if lat is None or lon is None:
+            continue
+        points.append((lat, lon))
+    if not points:
+        return None
+    lats = [p[0] for p in points]
+    lons = [p[1] for p in points]
+    return [[min(lats), min(lons)], [max(lats), max(lons)]]
+
+
 @app.callback(
     Output(MapIds.MAP, "children"),
     Output(MapIds.MAP, "viewport"),
@@ -473,6 +515,7 @@ def _bounds_for_region_selection(region_key, gbounds, region_by_glider, hidden):
     Output(AlertIds.BANNER, "children"),
     Output(ContainerIds.MAP_LEGEND, "children"),
     Output(StoreIds.LEGEND_BOUNDS_STORE, "data"),
+    Output(StoreIds.SECTION_BOUNDS_STORE, "data"),
     Input(StoreIds.MAPDATA_STORE, "data"),
     Input(StoreIds.TIMERANGE_STORE, "data"),
     Input(ControlIds.UV_SCALE, "value"),
@@ -511,9 +554,9 @@ def update_map(store_data, time_range, uv_scale, region_store, auto_zoom, hidden
     zoom_ctrl = dl.ZoomControl(position="bottomright")
 
     if not latlon_records:
-        return [tile, zoom_ctrl], no_update, False, "", [], {}
+        return [tile, zoom_ctrl], no_update, False, "", [], {}, {}
 
-    data_children, bounds, legend_items, gbounds = _build_map_children(
+    data_children, bounds, legend_items, gbounds, section_bounds = _build_map_children(
         latlon_records, uv_records, time_range, uv_scale, hidden=hidden
     )
 
@@ -530,7 +573,7 @@ def update_map(store_data, time_range, uv_scale, region_store, auto_zoom, hidden
                 for r in records if r.get("time") is not None and not np.isnan(r["time"])
             )
             shifted_range = [last_ts - window, last_ts]
-            data_children, bounds, legend_items, gbounds = _build_map_children(
+            data_children, bounds, legend_items, gbounds, section_bounds = _build_map_children(
                 latlon_records, uv_records, shifted_range, uv_scale, hidden=hidden
             )
             if data_children:
@@ -542,11 +585,11 @@ def update_map(store_data, time_range, uv_scale, region_store, auto_zoom, hidden
                     vp = no_update
                 return (all_children, vp, True,
                     f"No data found for the selected time range. Showing the same time window ending at the last available data ({last_dt}).",
-                    _legend_children(legend_items), gbounds)
+                    _legend_children(legend_items), gbounds, section_bounds)
 
         selected_bounds = _bounds_for_region_selection(region_key, gbounds, region_by_glider, hidden)
         vp = no_update if not should_update_viewport or not selected_bounds else _viewport_for_bounds(selected_bounds)
-        return [tile, zoom_ctrl], vp, False, "", _legend_children(legend_items), gbounds
+        return [tile, zoom_ctrl], vp, False, "", _legend_children(legend_items), gbounds, section_bounds
 
     all_children = [tile, zoom_ctrl] + data_children
     legend = _legend_children(legend_items)
@@ -554,9 +597,9 @@ def update_map(store_data, time_range, uv_scale, region_store, auto_zoom, hidden
 
     if is_visibility_toggle:
         vp = _viewport_for_bounds(selected_bounds) if should_update_viewport and selected_bounds else no_update
-        return all_children, vp, False, "", legend, gbounds
+        return all_children, vp, False, "", legend, gbounds, section_bounds
     vp = no_update if not should_update_viewport or is_interval_refresh or not selected_bounds else _viewport_for_bounds(selected_bounds)
-    return all_children, vp, False, "", legend, gbounds
+    return all_children, vp, False, "", legend, gbounds, section_bounds
 
 
 def _legend_children(legend_items):
@@ -652,6 +695,38 @@ def zoom_to_legend(_clicks, gbounds):
         raise PreventUpdate
     sn = trig["index"]
     bounds = gbounds.get(sn)
+    if not bounds:
+        raise PreventUpdate
+    return _viewport_for_bounds(bounds)
+
+
+@app.callback(
+    Output(ControlIds.SECTION_ZOOM_BTN, "disabled"),
+    Input(ControlIds.GLIDER_SELECT, "value"),
+)
+def toggle_section_zoom_button(glider_sn):
+    return not glider_sn
+
+
+@app.callback(
+    Output(MapIds.MAP, "viewport", allow_duplicate=True),
+    Input(ControlIds.SECTION_ZOOM_BTN, "n_clicks"),
+    State(ControlIds.GLIDER_SELECT, "value"),
+    State(ControlIds.SECTION_SELECT, "value"),
+    State(StoreIds.LEGEND_BOUNDS_STORE, "data"),
+    State(StoreIds.SECTION_BOUNDS_STORE, "data"),
+    prevent_initial_call=True,
+)
+def zoom_to_section_details(_n_clicks, glider_sn, section_num, gbounds, section_bounds):
+    if not glider_sn:
+        raise PreventUpdate
+
+    glider_sn = str(glider_sn)
+    if section_num is None:
+        bounds = (gbounds or {}).get(glider_sn)
+    else:
+        bounds = ((section_bounds or {}).get(glider_sn) or {}).get(_section_key(section_num))
+
     if not bounds:
         raise PreventUpdate
     return _viewport_for_bounds(bounds)

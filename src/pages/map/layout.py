@@ -173,6 +173,16 @@ def section_details_div():
                 className="g-2",
                 align="end",
             ),
+            dbc.Button(
+                "Zoom To",
+                id=ControlIds.SECTION_ZOOM_BTN,
+                size="sm",
+                color="secondary",
+                outline=True,
+                disabled=True,
+                n_clicks=0,
+                className="w-100 mt-2",
+            ),
 
             # Output text area
             html.Div(
@@ -284,6 +294,7 @@ def main_layout():
             dcc.Store(id=StoreIds.TIMEBTN_ACTIVE_STORE, storage_type="memory", data=ControlIds.TIME_BTN_MONTH),
             dcc.Store(id=StoreIds.REGION_ACTIVE_STORE, storage_type="memory", data={"region": _default_region, "n": 0}),
             dcc.Store(id=StoreIds.LEGEND_BOUNDS_STORE, storage_type="memory", data={}),
+            dcc.Store(id=StoreIds.SECTION_BOUNDS_STORE, storage_type="memory", data={}),
             dcc.Store(id=StoreIds.LEGEND_HIDDEN_STORE, storage_type="memory", data=[]),
 
             # periodic check for updated data files

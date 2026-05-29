@@ -124,15 +124,22 @@ def _mission_date_label(meta):
     return start if start == end else f"{start} to {end}"
 
 
-def _bounds_for_records(records):
-    points = [
-        (float(r["lat"]), float(r["lon"]))
-        for r in records
-        if r.get("lat") is not None
-        and r.get("lon") is not None
-        and np.isfinite(r.get("lat"))
-        and np.isfinite(r.get("lon"))
-    ]
+def _bounds_for_records(records, section_num=None):
+    points = []
+    for record in records:
+        if section_num is not None:
+            try:
+                if int(record.get("section")) != int(section_num):
+                    continue
+            except (TypeError, ValueError):
+                continue
+        try:
+            lat = float(record["lat"])
+            lon = float(record["lon"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if np.isfinite(lat) and np.isfinite(lon):
+            points.append((lat, lon))
     if not points:
         return None
     lats = [p[0] for p in points]
@@ -211,6 +218,7 @@ def _build_map_children(missions, year_range, uv_scale, uv_data, hidden=None):
     children = []
     region_items = []
     mission_bounds = {}
+    section_bounds = {}
     region_bounds_map = defaultdict(list)
     all_bounds = []
     items_by_region = defaultdict(list)
@@ -240,6 +248,16 @@ def _build_map_children(missions, year_range, uv_scale, uv_data, hidden=None):
 
         if bounds:
             mission_bounds[mission_id] = bounds
+            section_bounds[str(mission_id)] = {}
+            for section in {r.get("section") for r in mission.get("records", []) if r.get("section") is not None}:
+                try:
+                    section_key = str(int(section))
+                except (TypeError, ValueError):
+                    section_key = str(section)
+                section_bounds[str(mission_id)][section_key] = _bounds_for_records(
+                    mission.get("records", []),
+                    section_num=section,
+                )
             region_bounds_map[region_key].append(bounds)
             all_bounds.append(bounds)
 
@@ -378,7 +396,7 @@ def _build_map_children(missions, year_range, uv_scale, uv_data, hidden=None):
             for region in items_by_region
         },
     }
-    return children, _merge_bounds(all_bounds), region_items, gbounds
+    return children, _merge_bounds(all_bounds), region_items, gbounds, section_bounds
 
 
 def _icon_button(icon_class, button_id, title, class_name="map-legend-eye", disabled=False):
@@ -662,6 +680,7 @@ def update_yearrange_store(year_range):
     Output(ContainerIds.MAP_LEGEND, "children"),
     Output(ContainerIds.MAP_LEGEND_MOBILE, "children"),
     Output(StoreIds.LEGEND_BOUNDS_STORE, "data"),
+    Output(StoreIds.SECTION_BOUNDS_STORE, "data"),
     Input(StoreIds.MAPDATA_STORE, "data"),
     Input(StoreIds.YEARRANGE_STORE, "data"),
     Input(ControlIds.UV_SCALE, "value"),
@@ -677,9 +696,9 @@ def update_map(store_data, year_range, uv_scale, uv_data, hidden, open_regions):
     zoom_ctrl = dl.ZoomControl(position="bottomright")
 
     if not missions:
-        return [tile, zoom_ctrl], _viewport_for_default(), [], [], {}
+        return [tile, zoom_ctrl], _viewport_for_default(), [], [], {}, {}
 
-    data_children, bounds, region_items, gbounds = _build_map_children(
+    data_children, bounds, region_items, gbounds, section_bounds = _build_map_children(
         missions, year_range, uv_scale, uv_data, hidden=hidden
     )
     if not data_children:
@@ -695,10 +714,10 @@ def update_map(store_data, year_range, uv_scale, uv_data, hidden, open_regions):
         StoreIds.UV_STORE,
         ControlIds.UV_SCALE,
     ):
-        return all_children, no_update, desktop_legend, mobile_legend, gbounds
+        return all_children, no_update, desktop_legend, mobile_legend, gbounds, section_bounds
     if bounds:
-        return all_children, _viewport_for_bounds(bounds), desktop_legend, mobile_legend, gbounds
-    return all_children, _viewport_for_default(), desktop_legend, mobile_legend, gbounds
+        return all_children, _viewport_for_bounds(bounds), desktop_legend, mobile_legend, gbounds, section_bounds
+    return all_children, _viewport_for_default(), desktop_legend, mobile_legend, gbounds, section_bounds
 
 
 @app.callback(
@@ -766,6 +785,42 @@ def zoom_to_legend(_mission_clicks, _region_clicks, _master_clicks, gbounds):
         bounds = (gbounds.get("regions") or {}).get(trig["index"])
     else:
         bounds = (gbounds.get("missions") or {}).get(str(trig["index"]))
+
+    if not bounds:
+        raise PreventUpdate
+    return _viewport_for_bounds(bounds)
+
+
+@app.callback(
+    Output(ControlIds.SECTION_ZOOM_BTN, "disabled"),
+    Input(ControlIds.GLIDER_SELECT, "value"),
+)
+def toggle_section_zoom_button(mission_id):
+    return not mission_id
+
+
+@app.callback(
+    Output(MapIds.MAP, "viewport", allow_duplicate=True),
+    Input(ControlIds.SECTION_ZOOM_BTN, "n_clicks"),
+    State(ControlIds.GLIDER_SELECT, "value"),
+    State(ControlIds.SECTION_SELECT, "value"),
+    State(StoreIds.LEGEND_BOUNDS_STORE, "data"),
+    State(StoreIds.SECTION_BOUNDS_STORE, "data"),
+    prevent_initial_call=True,
+)
+def zoom_to_section_details(_n_clicks, mission_id, section_num, gbounds, section_bounds):
+    if not mission_id:
+        raise PreventUpdate
+
+    mission_id = str(mission_id)
+    mission_bounds = (gbounds or {}).get("missions") or {}
+    if mission_id not in mission_bounds:
+        raise PreventUpdate
+
+    if section_num is None:
+        bounds = mission_bounds.get(mission_id)
+    else:
+        bounds = ((section_bounds or {}).get(mission_id) or {}).get(str(section_num))
 
     if not bounds:
         raise PreventUpdate
