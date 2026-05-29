@@ -856,6 +856,33 @@ def set_glider_options(store_data, search_value):
 
 
 @app.callback(
+    Output(TextIds.GLIDER_SELECT_TOOLTIP, "children"),
+    Input(ControlIds.GLIDER_SELECT, "value"),
+    Input(StoreIds.MAPDATA_STORE, "data"),
+)
+def update_mission_select_tooltip(mission_id, store_data):
+    if not mission_id:
+        return "Select a mission"
+
+    mission_id = str(mission_id)
+    mission = ((store_data or {}).get("missions") or {}).get(mission_id, {})
+    region_key = mission.get("region", "")
+    date_label = _mission_date_label(mission) if mission else ""
+    date_lines = date_label.split(" to ") if date_label else ["No track data"]
+    if len(date_lines) == 2:
+        date_lines = [date_lines[0], "to", date_lines[1]]
+
+    return html.Div(
+        [
+            html.Div(f"Mission {mission_id}"),
+            html.Div(_region_display(region_key)),
+            html.Br(),
+            *[html.Div(line) for line in date_lines],
+        ]
+    )
+
+
+@app.callback(
     Output(ControlIds.UV_PLOT_BTN, "disabled"),
     Input(ControlIds.GLIDER_SELECT, "value"),
 )

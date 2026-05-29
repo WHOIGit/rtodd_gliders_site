@@ -39,6 +39,7 @@ class ContainerIds:
 
 class TextIds:
     SECTION_DETAILS_TEXT = "section-details-text"
+    GLIDER_SELECT_TOOLTIP = "glider-select-tooltip"
 
 class IntervalIds:
     DATA_REFRESH = "data-refresh-interval"

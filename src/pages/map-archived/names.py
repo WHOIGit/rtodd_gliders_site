@@ -38,6 +38,7 @@ class ContainerIds:
 
 class TextIds:
     SECTION_DETAILS_TEXT = PREFIX + "section-details-text"
+    GLIDER_SELECT_TOOLTIP = PREFIX + "glider-select-tooltip"
 
 
 class IntervalIds:

@@ -86,6 +86,12 @@ def section_details_div():
                                 placeholder="Select mission...",
                                 clearable=True,
                             ),
+                            dbc.Tooltip(
+                                "Select a mission",
+                                id=TextIds.GLIDER_SELECT_TOOLTIP,
+                                target=ControlIds.GLIDER_SELECT,
+                                placement="top",
+                            ),
                         ],
                         xs=12, sm=7,
                     ),

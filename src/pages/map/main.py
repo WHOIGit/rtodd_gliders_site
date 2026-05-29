@@ -58,6 +58,33 @@ def _latest_record_time(records):
     )
 
 
+def _format_utc_range(start_time, end_time):
+    start_time = _finite_number(start_time)
+    end_time = _finite_number(end_time)
+    if start_time is None or end_time is None:
+        return ["No track data"]
+
+    def fmt(ts):
+        return dt.datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d %H:%M UTC")
+
+    start = fmt(start_time)
+    end = fmt(end_time)
+    return [start] if start == end else [start, "to", end]
+
+
+def _records_time_range(records):
+    times = [
+        record_time
+        for record in (records or [])
+        if isinstance(record, dict)
+        for record_time in (_finite_number(record.get("time")),)
+        if record_time is not None
+    ]
+    if not times:
+        return None, None
+    return min(times), max(times)
+
+
 def _latest_section_cache_bust(store_data, glider_sn, section_num):
     if section_num is None:
         return None
@@ -838,6 +865,33 @@ def set_glider_options(store_data, search_value):
         region_labels=_REGION_LABELS,
         is_available=lambda sn: sn in loaded,
         include_no_data_suffix=True,
+    )
+
+
+@app.callback(
+    Output(TextIds.GLIDER_SELECT_TOOLTIP, "children"),
+    Input(ControlIds.GLIDER_SELECT, "value"),
+    Input(StoreIds.MAPDATA_STORE, "data"),
+)
+def update_glider_select_tooltip(glider_sn, store_data):
+    if not glider_sn:
+        return "Select a glider"
+
+    glider_sn = str(glider_sn)
+    store_data = store_data or {}
+    records = (store_data.get("latlon_records") or {}).get(glider_sn, [])
+    region_key = (store_data.get("region_by_glider") or {}).get(glider_sn)
+    if not region_key:
+        region_key = get_gdl().active_meta.get(glider_sn, {}).get("region", "")
+    start_time, end_time = _records_time_range(records)
+
+    return html.Div(
+        [
+            html.Div(f"Spray {glider_sn}"),
+            html.Div(_region_display(region_key)),
+            html.Br(),
+            *[html.Div(line) for line in _format_utc_range(start_time, end_time)],
+        ]
     )
 
 
