@@ -420,6 +420,7 @@ def section_plot_details(
     identifier: str,
     section_num,
     chart_specs: list[tuple[str, str]],
+    cache_bust=None,
 ):
     if source == "realtime":
         mission_url = "https://gliders.whoi.edu/data/realtime/{:04d}.html".format(int(identifier))
@@ -450,6 +451,8 @@ def section_plot_details(
 
     def img_block(series, header):
         url = chart_url(series)
+        if cache_bust is not None:
+            url = f"{url}?v={cache_bust}"
         return html.Div(
             [
                 html.H4(header),

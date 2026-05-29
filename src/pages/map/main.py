@@ -58,6 +58,32 @@ def _latest_record_time(records):
     )
 
 
+def _latest_section_cache_bust(store_data, glider_sn, section_num):
+    if section_num is None:
+        return None
+    records = ((store_data or {}).get("latlon_records") or {}).get(str(glider_sn), [])
+    latest_record = None
+    latest_time = None
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        record_time = _finite_number(record.get("time"))
+        if record_time is None:
+            continue
+        if latest_time is None or record_time > latest_time:
+            latest_record = record
+            latest_time = record_time
+    if latest_record is None:
+        return None
+    try:
+        is_latest_section = int(latest_record.get("section")) == int(section_num)
+    except (TypeError, ValueError):
+        is_latest_section = latest_record.get("section") == section_num
+    if not is_latest_section:
+        return None
+    return int(latest_time)
+
+
 def _section_key(section):
     try:
         return str(int(section))
@@ -819,8 +845,9 @@ def set_glider_options(store_data, search_value):
     Output(TextIds.SECTION_DETAILS_TEXT, "children"),
     Input(ControlIds.GLIDER_SELECT, "value"),
     Input(ControlIds.SECTION_SELECT, "value"),
+    Input(StoreIds.MAPDATA_STORE, "data"),
 )
-def populate_section_details(glider_sn, section_num):
+def populate_section_details(glider_sn, section_num, store_data):
     if not glider_sn:
         return "Select a glider to see details."
 
@@ -833,6 +860,7 @@ def populate_section_details(glider_sn, section_num):
         identifier=glider_sn,
         section_num=section_num,
         chart_specs=chart_specs,
+        cache_bust=_latest_section_cache_bust(store_data, glider_sn, section_num),
     )
 
 def get_sections_for_glider(store_data, glider_sn):
