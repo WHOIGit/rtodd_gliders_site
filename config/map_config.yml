@@ -1,6 +1,9 @@
 glider_image: "glider-icon.png"
 
 regions:
+  unnassigned:
+    label: "No Region"
+
   gulfstream:
     label: "Gulf Stream"
 

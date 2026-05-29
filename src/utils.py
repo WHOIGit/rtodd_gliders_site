@@ -16,6 +16,8 @@ CONFIG_ASSETS_URL_PREFIX = "/config-assets/"
 PORTRAITS_DIR = Path("config/assets/people-imgs").resolve()
 PORTRAITS_URL_PREFIX = "/config-assets/people-img/"
 
+UNASSIGNED_REGION_KEY = "unnassigned"
+
 
 # Candidate step sizes (in seconds): plotly's base-60/24/7 sets × unit multipliers
 _NICE_STEPS_S: list[float] = sorted(
@@ -154,7 +156,14 @@ def load_region_labels(config_path) -> dict[str, str]:
 
 def region_display(region_labels: Mapping[str, str], key: str) -> str:
     """Return the display label for a region key."""
+    key = normalize_region_key(key)
     return region_labels.get(key, key)
+
+
+def normalize_region_key(key: str | None) -> str:
+    """Map blank region values to the configured no-region bucket."""
+    key = str(key or "").strip()
+    return key or UNASSIGNED_REGION_KEY
 
 
 def make_search_text(*parts) -> str:
@@ -211,7 +220,7 @@ def active_glider_dropdown_options(
     rows = []
     for sn in glider_ids:
         sn = str(sn)
-        region_key = region_by_glider.get(sn, "")
+        region_key = normalize_region_key(region_by_glider.get(sn, ""))
         region_lbl = region_display(region_labels, region_key)
         search_text = make_search_text(sn, f"spray {sn}", region_key, region_lbl)
         if not matches_query(search_text, search_value):
@@ -251,7 +260,7 @@ def mission_dropdown_options(
     for mission_id in mission_ids:
         mission_id = str(mission_id)
         meta = mission_meta.get(mission_id, {})
-        region_key = meta.get("region", "")
+        region_key = normalize_region_key(meta.get("region", ""))
         region_lbl = region_display(region_labels, region_key)
         date_text = date_label(mission_id, meta) if date_label else ""
         extra = list(extra_search(mission_id, meta)) if extra_search else []
@@ -312,7 +321,7 @@ def load_map_region_config(config_path, active_regions=None):
         elif (assets_dir / glider_image).exists():
             glider_image_url = asset_url(glider_image, "/assets/")
 
-    active_regions = set(active_regions or [])
+    active_regions = {normalize_region_key(region) for region in (active_regions or [])}
     default_region = None
     region_options = []
 

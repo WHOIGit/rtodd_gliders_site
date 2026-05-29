@@ -7,11 +7,11 @@ import dash_bootstrap_components as dbc
 import dash_leaflet as dl
 
 from .names import *
-from utils import load_region_labels
+from utils import load_region_labels, normalize_region_key
 from data_loader import DEFAULT_DATA_DIR, GliderDataLoader
 
 _gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=False)
-_active_regions = {m["region"] for m in _gdl.active_meta.values()}
+_active_regions = {normalize_region_key(m.get("region", "")) for m in _gdl.active_meta.values()}
 _region_labels = load_region_labels(Path("config/map_config.yml").resolve())
 _default_region = "all"
 _region_options = [{"label": "Show All", "value": _default_region}] + [

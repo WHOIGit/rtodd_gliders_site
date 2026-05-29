@@ -21,6 +21,7 @@ from utils import (
     latlon_offset,
     load_map_region_config,
     load_region_labels,
+    normalize_region_key,
     region_display,
     section_chart_specs,
     section_opacity_by_section,
@@ -225,7 +226,7 @@ def rgb_to_hex(r:int, g:int, b:int, a=None):
 
 def _load_region_config():
     gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=False)
-    active_regions = {m["region"] for m in gdl.active_meta.values()}
+    active_regions = {normalize_region_key(m.get("region", "")) for m in gdl.active_meta.values()}
     _, _, glider_image_url = load_map_region_config(
         Path("config/map_config.yml").resolve(),
         active_regions=active_regions,
@@ -753,7 +754,7 @@ def load_mapdata_from_source():
         "latlon_records": latlon_records,
         "uv_records": uv_records,
         "region_by_glider": {
-            sn: meta.get("region", "")
+            sn: normalize_region_key(meta.get("region", ""))
             for sn, meta in gdl.active_meta.items()
             if sn in latlon_records
         },
@@ -801,7 +802,7 @@ def set_glider_options(store_data, search_value):
     gdl = get_gdl()
     all_sns = sorted(set(gdl.all_active_sns()) | loaded)
     region_by_glider = {
-        sn: gdl.active_meta.get(sn, {}).get("region", "")
+        sn: normalize_region_key(gdl.active_meta.get(sn, {}).get("region", ""))
         for sn in all_sns
     }
     return active_glider_dropdown_options(

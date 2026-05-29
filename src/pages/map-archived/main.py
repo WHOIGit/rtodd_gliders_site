@@ -18,6 +18,7 @@ from utils import (
     load_map_region_config,
     load_region_labels,
     mission_dropdown_options,
+    normalize_region_key,
     region_display,
     section_chart_specs,
     section_opacity_by_section,
@@ -61,7 +62,7 @@ COLOR_CYCLE = [
 
 def _load_region_config():
     gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=False)
-    archive_regions = {m["region"] for m in gdl.archive_missions.values()}
+    archive_regions = {normalize_region_key(m.get("region", "")) for m in gdl.archive_missions.values()}
     _, _, glider_image_url = load_map_region_config(
         Path("config/map_config.yml").resolve(),
         active_regions=archive_regions,
@@ -180,7 +181,7 @@ def load_mapdata_from_source():
         yymm = parse_mission_yyyymmm(mission_id)
         mission = {
             "mission_id": mission_id,
-            "region": meta.get("region", ""),
+            "region": normalize_region_key(meta.get("region", "")),
             "type": meta.get("type", ""),
             "available": gdl.has_json(mission_id),
             "mission_year": mission_year,

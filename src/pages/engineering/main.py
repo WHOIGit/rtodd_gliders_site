@@ -12,6 +12,7 @@ from data_loader import GliderDataLoader, parse_mission_yyyymmm, get_gdl as _get
 from utils import (
     active_glider_dropdown_options,
     mission_dropdown_options,
+    normalize_region_key,
     time_ticks,
     load_region_labels,
 )
@@ -109,7 +110,7 @@ def populate_glider_options(archived_value, search_value, current_value):
         sns,
         search_value=search_value,
         region_by_glider={
-            sn: gdl.active_meta.get(sn, {}).get("region", "")
+            sn: normalize_region_key(gdl.active_meta.get(sn, {}).get("region", ""))
             for sn in sns
         },
         region_labels=_REGION_LABELS,
