@@ -4,7 +4,7 @@ from pathlib import Path
 import dash
 from dash import html, dcc
 
-from utils import static_layout
+from gliderapp.utils import static_layout
 
 PUBLICATIONS_HTML_PATH = os.environ.get("PUBLICATIONS_HTML_PATH", "config/publications.html")
 

@@ -1,6 +1,6 @@
 import os
 import dash
-from utils import static_layout
+from gliderapp.utils import static_layout
 
 HTML_PATH = os.environ.get("DATAPAGE_HTML_PATH", "config/datapage.html")
 layout = static_layout(HTML_PATH)

@@ -15,8 +15,8 @@ import pandas as pd
 # Dash pages expects a `layout` variable in the module
 from dash.exceptions import PreventUpdate
 
-from data_loader import DEFAULT_DATA_DIR, GliderDataLoader, get_gdl
-from utils import (
+from gliderapp.data_loader import DEFAULT_DATA_DIR, GliderDataLoader, get_gdl
+from gliderapp.utils import (
     active_glider_dropdown_options,
     latlon_offset,
     load_map_region_config,
@@ -119,7 +119,7 @@ def _section_key(section):
 
 
 from .layout import layout, TILE_URL
-from names import *
+from gliderapp.names import *
 from .names import *
 
 # Register this file as a Dash "page"

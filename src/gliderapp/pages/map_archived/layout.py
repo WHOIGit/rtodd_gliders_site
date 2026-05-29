@@ -5,7 +5,7 @@ from dash import html, dcc
 import dash_bootstrap_components as dbc
 import dash_leaflet as dl
 
-from data_loader import DEFAULT_DATA_DIR, GliderDataLoader
+from gliderapp.data_loader import DEFAULT_DATA_DIR, GliderDataLoader
 from .names import ControlIds, StoreIds, MapIds, ContainerIds, TextIds, IntervalIds
 
 

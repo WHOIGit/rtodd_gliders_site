@@ -1,6 +1,6 @@
 # Glider App
 
-Web application for visualizing WHOI Spray autonomous underwater glider deployments. Built with Dash, Plotly, and Flask. Displays real-time and archived glider tracks, sensor profiles, and research publications.
+Web application for visualizing WHOI Spray autonomous underwater glider deployments. Built with Dash, Plotly, and Flask. Displays real-time and archived glider tracks, sensor profiles, and research publications and other static pages.
 
 ## Production site
 
@@ -14,6 +14,8 @@ The app runs in Docker on `racing` at `/opt/gliderapp`.
 
 ### Build and launch
 
+Do this to update site and code to latest version from git repo. 
+
 ```bash
 ssh racing
 cd /opt/gliderapp
@@ -21,9 +23,7 @@ git fetch && git pull
 docker compose up --build --force-recreate -d
 ```
 
-This builds a Python 3.12 image, installs dependencies, starts the Dash app with gunicorn on port 8050, runs the `data-watcher` ingest process, and starts the GoatCounter analytics service. The containers restart automatically unless explicitly stopped.
-
-If the codebase changes, these are also the steps needed to deploy the code changes.
+This builds a Python 3.12 image from `pyproject.toml`, installs Pandoc 2.9.2.1 for publication generation, starts the Dash app with gunicorn on port 8050, runs the `data-watcher` ingest process, and starts the GoatCounter analytics service. The containers restart automatically unless explicitly stopped.
 
 Apache serves `https://gliders.whoi.edu/` publicly and proxies Dash requests to the `gliderapp` container on localhost port 8050.
 
@@ -31,12 +31,20 @@ Apache serves `https://gliders.whoi.edu/` publicly and proxies Dash requests to 
 
 - **Port:** 8050
 - **WSGI server:** gunicorn
+- **Python package:** `gliderapp` under `src/gliderapp/`
+- **Project commands:** `run-devserver`, `run-datawatcher`, and `update-publications` are installed from `pyproject.toml`
 - **Volumes:** `gliderapp` mounts `/srv/data` at `/app/data` read-only and `./config` at `/app/config` read-only. `data-watcher` mounts `/srv/data/sync` read-only and `/srv/data/netcdf` read-write so it can maintain the NetCDF cache. `goatcounter` stores analytics data in `/srv/data/analytics`.
 - **Environment:** `gliderapp` and `data-watcher` load required production settings from `prod.env`
 
 ## Configuration
 
-Config files live in `config/` and are mounted into the container at runtime. Changes take effect after restarting the container (`docker compose up --force-recreate -d`).
+Config files live in `config/` and are mounted into the container at runtime. 
+
+For changes to take effect, run:
+
+```bash
+docker compose up --force-recreate -d
+```
 
 | File | Purpose |
 |------|---------|
@@ -49,7 +57,7 @@ Config files live in `config/` and are mounted into the container at runtime. Ch
 
 ### Data and static plots
 
-The app's data flow is documented in [`DATA_SCHEMA.md`](DATA_SCHEMA.md). In production, `/srv/data/sync` contains source `*_web.json` files, and `data-watcher` maintains generated NetCDF cache files in `/srv/data/netcdf`. The `gliderapp` container reads `/srv/data` read-only at `/app/data`.
+The app's data flow is documented in [`DATA_SCHEMA.md`](DATA_SCHEMA.md). In production, `/srv/data/sync` contains source `*_web.json` files, and `data-watcher` maintains generated NetCDF cache files in `/srv/data/netcdf`. The `gliderapp` container mounts `/srv/data` to `/app/data` internally (read-only).
 
 Historical static pages, generated plot images, and directory indexes under `https://gliders.whoi.edu/data/` are not served by Dash. Apache serves that legacy tree directly from `/var/www/gliders.whoi.edu/data`, and those files are updated by external processing outside this repo. Several app links intentionally point into that `/data/` tree.
 
@@ -74,18 +82,39 @@ Production settings are committed in `prod.env` and loaded by `gliderapp` and `d
 
 ## Local Development
 
-Install dependencies, then run the app directly with Python:
+Install the package in editable mode, then run the Dash development server:
 
 ```bash
 python -m venv .venv
 . .venv/bin/activate
-pip install -r requirements.txt
-PROD=0 DEBUG=1 python src/app.py
+pip install -e .
+PROD=0 DEBUG=1 run-devserver
 ```
 
 The app will be available at `http://localhost:8050`. By default, local runs look for source data in `./data/sync` and NetCDF cache files in `./data/netcdf`; set `DATA_DIR` and `NETCDF_DIR` if your local data lives elsewhere.
 
 A fresh clone does not include local glider data. To exercise map/profile pages locally, point `DATA_DIR` and `NETCDF_DIR` at a copied or mounted data tree with the CSV metadata files and generated NetCDF cache described in [`DATA_SCHEMA.md`](DATA_SCHEMA.md).
+
+Useful installed commands:
+
+```bash
+run-devserver                         # local Dash server
+run-datawatcher                       # poll DATA_DIR and maintain NETCDF_DIR
+update-publications                   # rebuild config/publications.html from bibtex/input/refs.bib
+update-publications refs.bib -o out.html
+```
+
+## Project Layout
+
+```text
+src/gliderapp/         Python package, Dash app, pages, assets, data loader, watcher
+config/                Runtime HTML/YAML config mounted into the container
+bibtex/                BibTeX-to-HTML publication pipeline
+apache/                Reference Apache vhost configs for production
+compose.yml            Production Docker Compose services
+Dockerfile             Python 3.12 image with Pandoc 2.9.2.1
+pyproject.toml         Package metadata, dependencies, and console scripts
+```
 
 ## BibTeX Module
 
@@ -93,19 +122,30 @@ The `bibtex/` directory contains a pipeline for converting a BibTeX bibliography
 
 ### Prerequisites
 
-- [pandoc](https://pandoc.org/) — install with `sudo apt install pandoc pandoc-citeproc` (Debian/Ubuntu)
-- Python 3 environment with `beautifulsoup4` and `lxml`
+- [pandoc](https://pandoc.org/) — install with `sudo apt install pandoc` (Debian/Ubuntu) when running outside Docker
+- Python 3 environment with project dependencies installed
 
 ### Usage
 
 ```bash
-./bibtex/bib2html.sh bibtex/input/refs.bib
+update-publications path/to/refs.bib -o output.html
 ```
 
-This generates `bibtex/output/publications.html`. To write directly to config:
+This reads an input bibtex file, runs Pandoc with the AGU citation style, post-processes the generated HTML, and outputs a formatted html file.
+
+If used without arguments, it defaults to using `bibtex/input/refs.bib` and  `-o config/publications.html`.
+
+The Docker image also includes Pandoc 2.9.2.1 and the BibTeX tooling:
 
 ```bash
-./bibtex/bib2html.sh bibtex/input/refs.bib config/publications.html
+# Make sure gliderapp docker image exists/has been built
+docker compose build gliderapp
+
+# Default update commands
+docker run --rm -v "$PWD:/work" -w /work gliderapp:latest update-publications
+
+# Custom bibtex file to html file command
+docker run --rm -v "$PWD:/work" -w /work gliderapp:latest update-publications bibtex/input/refs.bib -o ./new-publications.html
 ```
 
 ### What it does
@@ -117,13 +157,15 @@ This generates `bibtex/output/publications.html`. To write directly to config:
    - Bolds author names listed in `bibtex/input/bold_authors.txt`
    - Strips `<html>`/`<body>` tags for embedding
 
+Internally, `update-publications` command runs `src/gliderapp/publications.py`, which in-turn calls `bibtex/bib2html.sh`.
+
 ### Files
 
 ```
 bibtex/
 ├── input/
 │   ├── refs.bib              # Main bibliography
-│   └── bold_authors.txt      # Authors to bold (one per line, e.g. "Todd, R. E.")
+│   └── bold_authors.txt      # Authors to bold (one per line, exact match only, e.g. "Todd, R. E.")
 ├── output/
 │   └── publications.html     # Generated output
 ├── american-geophysical-union.csl  # Citation style
@@ -135,6 +177,13 @@ bibtex/
 ### Updating publications
 
 1. Edit `bibtex/input/refs.bib` (add/remove BibTeX entries)
-2. Run `./bibtex/bib2html.sh bibtex/input/refs.bib config/publications.html`
-3. Commit and deploy
+2. Run `update-publications`
+3. Deploy and verify
    - `docker compose up --force-recreate -d`
+   - `https://gliders.whoi.edu/publications`
+4. Commit changes to git
+   - `git add bibtex/input/refs.bib config/publications.html`
+   - `git commit -m "updated publications.html"`
+   - `git push`
+
+## Updating Configs

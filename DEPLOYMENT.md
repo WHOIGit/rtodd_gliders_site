@@ -54,26 +54,37 @@ The repo's `origin` remote uses the `github-gliderapp` host alias so pulls alway
 The app runs under Docker Compose (`compose.yml`). Three services are defined:
 
 - `gliderapp` — the Dash web app, exposed on host port `8050`
-- `data-watcher` — background ingest from `/srv/data/sync` into `/srv/data/netcdf`
+- `data-watcher` — background ingest from `/srv/data/sync` into `/srv/data/netcdf`, started with the installed `run-datawatcher` command
 - `goatcounter` — self-hosted web analytics (see [Analytics](#analytics-goatcounter) below)
 
 `gliderapp` and `data-watcher` share the `gliderapp:latest` image built from the repo's `Dockerfile`. `goatcounter` uses the upstream `arp242/goatcounter` image.
 
 Apache is the public entrypoint. It terminates TLS for `gliders.whoi.edu`, serves the legacy `/data/` tree directly from disk, and proxies Dash routes to the `gliderapp` container on `127.0.0.1:8050`.
 
+### Image contents
+
+The project is packaged from `pyproject.toml` as the `gliderapp` Python package under `src/gliderapp/`. The image installs the package with `pip install .`, exposes the console commands from `pyproject.toml`, and starts the web app with:
+
+```sh
+gunicorn --no-control-socket -b 0.0.0.0:8050 gliderapp.app:server
+```
+
+The image also installs Pandoc `2.9.2.1`, matching the current server version, so publication HTML can be regenerated inside the container.
+
 ### Standard deploy / update
 
 From `/opt/gliderapp`, as the `gliderapp` user (or a group member via the wrapper above):
 
 ```sh
-git stash               # park any local edits so the pull is clean
+git status
 git fetch
 git pull
-git stash pop           # optional: reapply local edits (skip if you don't need them)
 docker compose up --build --force-recreate -d
 ```
 
 `--build` rebuilds the image; `--force-recreate -d` recreates the containers in the background so the new image is actually picked up.
+
+If local edits need to be parked before pulling, use `git stash` before `git pull` and `git stash pop` after the pull.
 
 If the stashed/local changes are worth keeping, commit and push them rather than leaving them sitting on the prod box:
 
@@ -85,10 +96,22 @@ git push
 
 ### Updating configs or regenerated content
 
-For changes to `config/` (static pages, `map_config.yml`, `people.yml`) or to `publications.html` regenerated from `bibtex/`, the workflow is the same — recreate the containers so the new content is served:
+For changes to `config/` (static pages, `map_config.yml`, `people.yml`) or to `config/publications.html` regenerated from `bibtex/`, recreate the containers so the new content is served:
 
 ```sh
 docker compose up --build --force-recreate -d
+```
+
+To regenerate publications from the default bibliography in a local Python environment where the package is installed:
+
+```sh
+update-publications
+```
+
+On the production host, use the Docker image so the pinned Pandoc version and project dependencies are used:
+
+```sh
+docker run --rm -v "$PWD:/work" -w /work gliderapp:latest update-publications
 ```
 
 Verify the change in the running app, and **only once you're satisfied**, commit and push:
@@ -111,7 +134,7 @@ docker compose down        # stop everything
 
 ## Configuration
 
-- **Environment / secrets:** `/opt/gliderapp/prod.env` — edit to change runtime settings (DB URLs, feature flags, etc.). Recreate containers after changes: `docker compose up -d`.
+- **Environment:** `/opt/gliderapp/prod.env` — edit to change runtime settings. Recreate containers after changes: `docker compose up -d`.
 - **App configuration:** `/opt/gliderapp/config/` is bind-mounted read-only into the `gliderapp` container at `/app/config`. Contains:
   - `map_config.yml` — map layers / sites
   - `people.yml` — contributors
@@ -119,6 +142,18 @@ docker compose down        # stop everything
   - `assets/` — static assets served by Dash
 
 Changes to files in `config/` take effect on the next container restart (or immediately for files re-read on each request, depending on the code path).
+
+Runtime environment defaults are committed in `prod.env`. The important production values are:
+
+| Variable | Production value | Purpose |
+|----------|------------------|---------|
+| `PROD` | `1` | Enables production Dash path handling |
+| `SUBPATH` | empty | Serves the Dash app at the site root |
+| `DATA_DIR` | `/app/data/sync` | Source `*_web.json` directory for `data-watcher` |
+| `NETCDF_DIR` | `/app/data/netcdf` | NetCDF cache directory |
+| `TRACKS_NETCDF` | `tracks.nc` | Aggregate tracks cache |
+| `POLL_INTERVAL` | `300` | Watcher polling interval in seconds |
+| `ANALYTICS_ENDPOINT` | `https://analytics.gliders.whoi.edu` | Enables GoatCounter injection |
 
 ## Apache vhosts
 
@@ -181,7 +216,7 @@ Site traffic is tracked by a self-hosted [GoatCounter](https://www.goatcounter.c
 
 - The container listens HTTP-only on `127.0.0.1:8051` (loopback — not directly reachable from the network).
 - Apache serves `analytics.gliders.whoi.edu`, terminates TLS, and reverse-proxies to that port. The GoatCounter dashboard (and its login) lives there — that login *is* the analytics admin page.
-- The tracking snippet is injected into every page by `src/app.py` when `ANALYTICS_ENDPOINT` is set in `prod.env`. A clientside callback in `src/layout.py` counts each Dash route change (Dash navigation is client-side, so a plain onload counter would miss it).
+- The tracking snippet is injected into every page by `src/gliderapp/app.py` when `ANALYTICS_ENDPOINT` is set in `prod.env`. A clientside callback in `src/gliderapp/layout.py` counts each Dash route change (Dash navigation is client-side, so a plain onload counter would miss it).
 - The SQLite database is stored on the host at `/srv/data/analytics`.
 
 ### First-time setup

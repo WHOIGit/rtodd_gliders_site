@@ -10,7 +10,7 @@ import yaml
 from dash import html
 import dash_bootstrap_components as dbc
 
-from utils import asset_url, PORTRAITS_DIR, PORTRAITS_URL_PREFIX
+from gliderapp.utils import asset_url, PORTRAITS_DIR, PORTRAITS_URL_PREFIX
 DEFAULT_IMAGE = os.environ.get("PORTRAITS_DEFAULT", "default.jpg")
 
 

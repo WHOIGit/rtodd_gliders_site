@@ -23,4 +23,4 @@ pandoc "$SCRIPTROOT/frontmatter.md" --bibliography="$INPUTBIB" --csl="$SCRIPTROO
 #  (1) groups entries by year applies
 #  (2) neatens the doi links
 #  (3) Bolds
-python3 "$SCRIPTROOT/reformat.py" "$OUTPUTHTML" --bold "$SCRIPTROOT/input/bold_authors.txt" --rm-html-body -o "$OUTPUTHTML"
+"${PYTHON:-python3}" "$SCRIPTROOT/reformat.py" "$OUTPUTHTML" --bold "$SCRIPTROOT/input/bold_authors.txt" --rm-html-body -o "$OUTPUTHTML"

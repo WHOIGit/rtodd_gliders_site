@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
-from data_loader import GliderDataLoader, parse_mission_yyyymmm, get_gdl as _get_gdl
-from utils import (
+from gliderapp.data_loader import GliderDataLoader, parse_mission_yyyymmm, get_gdl as _get_gdl
+from gliderapp.utils import (
     active_glider_dropdown_options,
     mission_dropdown_options,
     normalize_region_key,

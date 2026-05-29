@@ -7,8 +7,8 @@ import dash_bootstrap_components as dbc
 import dash_leaflet as dl
 
 from .names import *
-from utils import load_region_labels, normalize_region_key
-from data_loader import DEFAULT_DATA_DIR, GliderDataLoader
+from gliderapp.utils import load_region_labels, normalize_region_key
+from gliderapp.data_loader import DEFAULT_DATA_DIR, GliderDataLoader
 
 _gdl = GliderDataLoader(data_dir=DEFAULT_DATA_DIR, auto_load=False)
 _active_regions = {normalize_region_key(m.get("region", "")) for m in _gdl.active_meta.values()}

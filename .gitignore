@@ -1,5 +1,48 @@
-data
+# Local data and generated app artifacts
 data/
+bibtex/output/
+
+# Python bytecode and caches
 __pycache__/
-.*
-!.gitignore
+*.py[cod]
+*$py.class
+
+# Python virtual environments
+.venv/
+.eggvenv/
+venv/
+env/
+
+# Python version managers
+.python-version
+
+# Python packaging/build outputs
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Test, coverage, and type-check caches
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local environment files
+.env
+.env.*
+
+# Editor and OS noise
+.DS_Store
+.idea/
+.vscode/
+*~
+*.swp
+
+REVIEW.md
+SBatchelder_OVSN_workplan(Sheet1).csv
+OVSN-HOUR-TRACKING.ods
+MONTHLY-SUMMARY.md

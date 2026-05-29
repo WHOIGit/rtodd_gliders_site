@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gliderapp"
+version = "0.1.0"
+description = "Dash application for visualizing WHOI Spray autonomous underwater glider deployments."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "dash~=4.1.0",
+    "pandas~=3.0.3",
+    "dash-bootstrap-components~=2.0.4",
+    "gunicorn~=26.0.0",
+    "PyYAML~=6.0.3",
+    "beautifulsoup4~=4.14.3",
+    "lxml~=6.0",
+    "dash-extensions~=2.0.5",
+    "dash-leaflet~=1.1.3",
+    "ijson~=3.5.0",
+    "netCDF4~=1.7.4",
+]
+
+[project.scripts]
+run-devserver = "gliderapp.app:main"
+run-datawatcher = "gliderapp.data_watcher:main"
+update-publications = "gliderapp.publications:update_publications"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["gliderapp", "gliderapp.*"]
+
+[tool.setuptools.package-data]
+gliderapp = ["assets/*"]

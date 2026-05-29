@@ -5,7 +5,7 @@ import dash
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 
-from names import *
+from .names import *
 
 # Component IDs shared between the layout builders and register_callbacks().
 # Kept at module scope so callbacks can be registered exactly once, outside

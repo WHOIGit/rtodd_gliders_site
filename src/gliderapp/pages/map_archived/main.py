@@ -12,8 +12,8 @@ from dash.exceptions import PreventUpdate
 import numpy as np
 import pandas as pd
 
-from data_loader import DEFAULT_DATA_DIR, GliderDataLoader, get_gdl, parse_mission_yyyymmm
-from utils import (
+from gliderapp.data_loader import DEFAULT_DATA_DIR, GliderDataLoader, get_gdl, parse_mission_yyyymmm
+from gliderapp.utils import (
     latlon_offset,
     load_map_region_config,
     load_region_labels,
