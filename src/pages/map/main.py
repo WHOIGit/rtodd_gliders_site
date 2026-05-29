@@ -16,31 +16,47 @@ import pandas as pd
 from dash.exceptions import PreventUpdate
 
 from data_loader import DEFAULT_DATA_DIR, GliderDataLoader, get_gdl
-from utils import latlon_offset, load_map_region_config, load_region_labels, section_chart_specs
+from utils import (
+    active_glider_dropdown_options,
+    latlon_offset,
+    load_map_region_config,
+    load_region_labels,
+    region_display,
+    section_chart_specs,
+    section_opacity_by_section,
+    section_plot_details,
+)
 
 _REGION_LABELS = load_region_labels(Path("config/map_config.yml").resolve())
 
 
 def _region_display(key: str) -> str:
-    return _REGION_LABELS.get(key, key)
+    return region_display(_REGION_LABELS, key)
 
 
-def _make_search_text(*parts):
-    pieces = []
-    for p in parts:
-        if not p:
-            continue
-        s = str(p).lower()
-        pieces.append(s)
-        if " " in s:
-            pieces.append(s.replace(" ", ""))
-    return " ".join(pieces)
+def _finite_number(value):
+    if value is None:
+        return None
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    return value if np.isfinite(value) else None
 
 
-def _matches_query(search_text, query):
-    if not query:
-        return True
-    return all(tok in search_text for tok in query.lower().split())
+def _latest_record_time(records):
+    return max(
+        (
+            t
+            for record in (records or [])
+            if isinstance(record, dict)
+            for t in (_finite_number(record.get("time")),)
+            if t is not None
+        ),
+        default=0,
+    )
+
+
 from .layout import layout, TILE_URL
 from names import *
 from .names import *
@@ -260,10 +276,7 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, hidden
 
     sorted_gliders = sorted(
         latlon_records.items(),
-        key=lambda item: max(
-            (r['time'] for r in item[1] if r.get('time') is not None and not np.isnan(r['time'])),
-            default=0,
-        ),
+        key=lambda item: _latest_record_time(item[1]),
         reverse=True,
     )
 
@@ -271,13 +284,14 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, hidden
         color_hex = color_by_sn[glider_sn]
 
         df = pd.DataFrame(records)
-        df['dt'] = df.time.apply(lambda x: pd.NaT if np.isnan(x) else dt.datetime.utcfromtimestamp(x/1))
-        if df.empty or not {"lat", "lon"}.issubset(df.columns):
+        if df.empty or not {"lat", "lon", "time"}.issubset(df.columns):
             continue
+        if "section" not in df.columns:
+            df["section"] = 1
+        for column in ("lat", "lon", "time"):
+            df[column] = pd.to_numeric(df[column], errors="coerce")
+        df["dt"] = pd.to_datetime(df["time"], unit="s", utc=True, errors="coerce").dt.tz_convert(None)
         df = df.dropna(subset=["lat", "lon"])
-
-        num_of_sections = len(set(df.section))
-        opacities = np.linspace(0.2, 1, num_of_sections) if num_of_sections > 1 else [1.0]
 
         # filter by time range if available
         if time_range and "time" in df.columns:
@@ -289,6 +303,8 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, hidden
 
         if df.empty:
             continue
+
+        opacity_by_section = section_opacity_by_section(df["section"])
 
         is_hidden = str(glider_sn) in hidden_set
         legend_items.append((glider_sn, color_hex, is_hidden))
@@ -310,7 +326,7 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, hidden
         maxlon = max(maxlon, g_maxlon)
 
         for section, df_sec in df.groupby("section", sort=False):
-            opacity = float(opacities[section-1])
+            opacity = opacity_by_section.get(section, 1.0)
             positions = list(zip(
                 df_sec["lat"].tolist(),
                 df_sec["lon"].tolist(),
@@ -340,6 +356,13 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, hidden
         if uv_scale and uv_records and glider_sn in uv_records:
             uv_recs = uv_records[glider_sn]
             df_uv = pd.DataFrame(uv_recs)
+            if df_uv.empty or not {"lat", "lon", "u", "v"}.issubset(df_uv.columns):
+                continue
+            if "section" not in df_uv.columns:
+                df_uv["section"] = 1
+            for column in ("lat", "lon", "u", "v", "time"):
+                if column in df_uv.columns:
+                    df_uv[column] = pd.to_numeric(df_uv[column], errors="coerce")
             df_uv = df_uv.dropna(subset=["lat", "lon", "u", "v"])
 
             if time_range and "time" in df_uv.columns:
@@ -351,7 +374,7 @@ def _build_map_children(latlon_records, uv_records, time_range, uv_scale, hidden
 
             uv_lines = []
             for section, df_uv_sec in df_uv.groupby("section", sort=False):
-                opacity = float(opacities[section - 1])
+                opacity = opacity_by_section.get(section, 1.0)
                 lat = df_uv_sec["lat"].to_numpy()
                 lon = df_uv_sec["lon"].to_numpy()
                 vlat, ulon = latlon_offset(
@@ -702,35 +725,18 @@ def set_glider_options(store_data, search_value):
     loaded = set(latlon_records.keys())
     gdl = get_gdl()
     all_sns = sorted(set(gdl.all_active_sns()) | loaded)
-    rows = []
-    for sn in all_sns:
-        disabled = sn not in loaded
-        region_key = gdl.active_meta.get(sn, {}).get("region", "")
-        region_lbl = _region_display(region_key)
-        search_text = _make_search_text(sn, f"spray {sn}", region_key, region_lbl)
-        if not _matches_query(search_text, search_value):
-            continue
-        rows.append((disabled, sn, region_lbl, search_text))
-    rows.sort(key=lambda r: r[1])
-    sv = search_value or ""
-    gray = {"color": "#999", "marginLeft": "0.5em"}
-    disabled_style = {"color": "#aaa"}
-
-    def label(disabled, sn, region_lbl):
-        primary = html.Span(f"Spray {sn}", style=disabled_style) if disabled else f"Spray {sn}"
-        suffix = []
-        if region_lbl:
-            suffix.append(html.Span(f" {region_lbl}", style=gray))
-        if disabled:
-            suffix.append(html.Span(" (no data)", style=gray))
-        return html.Span([primary, *suffix])
-
-    return [{
-        "label": label(disabled, sn, region_lbl),
-        "value": sn,
-        "disabled": disabled,
-        "search": f"{search_text} {sv}",
-    } for disabled, sn, region_lbl, search_text in rows]
+    region_by_glider = {
+        sn: gdl.active_meta.get(sn, {}).get("region", "")
+        for sn in all_sns
+    }
+    return active_glider_dropdown_options(
+        all_sns,
+        search_value=search_value,
+        region_by_glider=region_by_glider,
+        region_labels=_REGION_LABELS,
+        is_available=lambda sn: sn in loaded,
+        include_no_data_suffix=True,
+    )
 
 
 @app.callback(
@@ -742,39 +748,16 @@ def populate_section_details(glider_sn, section_num):
     if not glider_sn:
         return "Select a glider to see details."
 
-    url_realtime_pattern = 'https://gliders.whoi.edu/data/realtime/{:04d}.html'
-    url_pattern = 'https://gliders.whoi.edu/data/figs/realtime/{SN:04d}/{KEY}_{SECTION}.png'
-
     # Charts are driven by the glider's variable list in active.csv/active2.csv
     # so plots the glider doesn't carry are never rendered (no broken images).
     gdl = get_gdl()
     chart_specs = section_chart_specs(gdl.section_variables(glider_sn), gdl.variable_names)
-
-    # Mission link - always shown when glider is selected
-    mission_link = html.Div([
-        html.A("All plots for this mission", href=url_realtime_pattern.format(int(glider_sn)), target="_blank"),
-    ], style={"margin-bottom": "30px"})
-
-    # Section plot images - only shown when section is selected
-    if section_num is None:
-        return html.Div([mission_link, "Select a section to see plots."])
-
-    def img_block(series, header):
-        url = url_pattern.format(SN=int(glider_sn), KEY=series, SECTION=section_num)
-        return html.Div([
-            html.H4(header),
-            html.A(
-                html.Img(src=url, style={"width": "100%", "max-width": "300px", "margin-top": "10px"}),
-                href=url,
-                target="_blank",
-            )
-        ], style={"margin-bottom": "20px"})
-
-    return html.Div([
-        mission_link,
-        html.H3(f"Section {section_num} Plots"),
-        *[img_block(key, header) for key, header in chart_specs],
-    ])
+    return section_plot_details(
+        source="realtime",
+        identifier=glider_sn,
+        section_num=section_num,
+        chart_specs=chart_specs,
+    )
 
 def get_sections_for_glider(store_data, glider_sn):
     latlon_records = (store_data or {}).get("latlon_records", {})

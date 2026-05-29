@@ -8,41 +8,16 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from data_loader import GliderDataLoader, parse_mission_yyyymmm, get_gdl as _get_gdl
-from utils import time_ticks, load_region_labels
+from utils import (
+    active_glider_dropdown_options,
+    mission_dropdown_options,
+    time_ticks,
+    load_region_labels,
+)
 from .layout import layout
 from .names import AdvStoreIds, AdvControlIds, AdvGraphIds, AdvContainerIds
 
 _REGION_LABELS = load_region_labels(Path("config/map_config.yml").resolve())
-
-
-def _region_display(key: str) -> str:
-    return _REGION_LABELS.get(key, key)
-
-
-def _make_search_text(*parts: str) -> str:
-    """Build the lowercased search-source for a dropdown option.
-
-    For each part, include both the lowercased text and a no-space variant so
-    queries like 'gulf' match 'gulfstream' and 'Gulf Stream' alike.
-    """
-    pieces = []
-    for p in parts:
-        if not p:
-            continue
-        s = str(p).lower()
-        pieces.append(s)
-        if " " in s:
-            pieces.append(s.replace(" ", ""))
-    return " ".join(pieces)
-
-
-def _matches_query(search_text: str, query: str | None) -> bool:
-    """Token-AND match: every whitespace-separated token in query must appear."""
-    if not query:
-        return True
-    q = query.lower()
-    # Allow queries with embedded spaces by splitting; each token is substring.
-    return all(tok in search_text for tok in q.split())
 
 dash.register_page(
     __name__,
@@ -757,18 +732,6 @@ def toggle_minimap(value):
 
 # ---------------------------------------------------------------------------
 # Populate glider/mission dropdown based on Archived toggle
-# ---------------------------------------------------------------------------
-_GRAY = {"color": "#999", "marginLeft": "0.5em"}
-_DISABLED_PRIMARY = {"color": "#aaa"}
-
-
-def _option_label(primary: str, suffix: str, disabled: bool = False):
-    primary_node = html.Span(primary, style=_DISABLED_PRIMARY) if disabled else primary
-    if not suffix:
-        return html.Span([primary_node]) if disabled else primary
-    return html.Span([primary_node, html.Span(suffix, style=_GRAY)])
-
-
 @app.callback(
     Output(AdvControlIds.GLIDER_SELECT, "options"),
     Output(AdvControlIds.GLIDER_SELECT, "value"),
@@ -785,50 +748,29 @@ def populate_glider_options(archived_value, search_value, current_value):
 
     if archived:
         ids = gdl.archive_mission_ids()
-        rows = []
-        for mid in ids:
-            meta = gdl.archive_missions.get(mid, {})
-            region_key = meta.get("region", "")
-            region_lbl = _region_display(region_key)
-            yymm = parse_mission_yyyymmm(mid)  # e.g. "2025 Dec"
-            year = yymm.split(" ")[0] if yymm and yymm != "?" else ""
-            month = yymm.split(" ")[1] if yymm and " " in yymm else ""
-            suffix = f" {region_lbl} - {yymm}" if region_lbl else f" {yymm}"
-            disabled = not gdl.has_json(mid)
-            search_text = _make_search_text(mid, region_key, region_lbl, year, month)
-            if not _matches_query(search_text, search_value):
-                continue
-            rows.append((disabled, mid, suffix, search_text))
-        rows.sort(key=lambda r: r[1])
-        sv = search_value or ""
-        opts = [{
-            "label": _option_label(mid, suffix, disabled=disabled),
-            "value": mid,
-            "disabled": disabled,
-            "search": f"{search_text} {sv}",
-        } for disabled, mid, suffix, search_text in rows]
+        opts = mission_dropdown_options(
+            ids,
+            search_value=search_value,
+            mission_meta=gdl.archive_missions,
+            region_labels=_REGION_LABELS,
+            is_available=gdl.has_json,
+            date_label=lambda mid, _meta: parse_mission_yyyymmm(mid),
+            extra_search=lambda mid, _meta: parse_mission_yyyymmm(mid).split(),
+        )
         new_value = no_update if is_search else None
         return opts, new_value, "Select mission...", "Mission"
 
     sns = gdl.all_active_sns()
-    rows = []
-    for sn in sns:
-        region_key = gdl.active_meta.get(sn, {}).get("region", "")
-        region_lbl = _region_display(region_key)
-        suffix = f" {region_lbl}" if region_lbl else ""
-        disabled = not gdl.has_json(sn)
-        search_text = _make_search_text(sn, f"spray {sn}", region_key, region_lbl)
-        if not _matches_query(search_text, search_value):
-            continue
-        rows.append((disabled, sn, suffix, search_text))
-    rows.sort(key=lambda r: r[1])
-    sv = search_value or ""
-    opts = [{
-        "label": _option_label(f"Spray {sn}", suffix, disabled=disabled),
-        "value": sn,
-        "disabled": disabled,
-        "search": f"{search_text} {sv}",
-    } for disabled, sn, suffix, search_text in rows]
+    opts = active_glider_dropdown_options(
+        sns,
+        search_value=search_value,
+        region_by_glider={
+            sn: gdl.active_meta.get(sn, {}).get("region", "")
+            for sn in sns
+        },
+        region_labels=_REGION_LABELS,
+        is_available=gdl.has_json,
+    )
     if is_search:
         new_value = no_update
     else:

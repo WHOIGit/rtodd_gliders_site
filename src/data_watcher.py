@@ -464,12 +464,14 @@ def scan_and_convert(known_mtimes: dict) -> dict:
 
     gliders = dict(existing_gliders)
     updated = False
+    new_known_mtimes = dict(known_mtimes)
 
     current_ids = {web_path.name[:-9] for web_path in web_files}
     for glider_id in list(gliders):
         if glider_id not in current_ids:
             logger.info(f"Removing missing source from manifest: {glider_id}")
-            gliders.pop(glider_id, None)
+            entry = gliders.pop(glider_id, None) or {}
+            new_known_mtimes.pop(entry.get("source_file", f"{glider_id}_web.json"), None)
             updated = True
 
     for web_path in web_files:
@@ -483,21 +485,31 @@ def scan_and_convert(known_mtimes: dict) -> dict:
         try:
             entry = write_glider_netcdf(web_path, NETCDF_DIR, glider_id)
             gliders[glider_id] = entry
-            known_mtimes[web_path.name] = current_mtime
+            new_known_mtimes[web_path.name] = current_mtime
             updated = True
         except Exception as e:
             logger.error(f"Failed to convert {web_path.name}: {e}")
 
     tracks_updated = updated or not tracks_store_complete(gliders)
+    tracks_ok = True
     if tracks_updated:
         try:
             write_tracks_netcdf(gliders, NETCDF_DIR)
         except Exception as e:
             logger.error(f"Failed to write tracks NetCDF: {e}")
+            tracks_ok = False
+        else:
+            tracks_ok = tracks_store_complete(gliders)
+            if not tracks_ok:
+                logger.error("Tracks NetCDF failed validation after write")
 
     if updated or tracks_updated:
+        if not tracks_ok:
+            logger.error("Manifest not written because tracks NetCDF is not consistent")
+            return known_mtimes
         atomic_write_json(manifest_path, build_manifest(gliders))
         logger.info(f"Manifest written: {len(gliders)} gliders")
+        return new_known_mtimes
 
     return known_mtimes
 

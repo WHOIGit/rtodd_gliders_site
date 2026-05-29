@@ -3,6 +3,7 @@ import math
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from typing import Callable, Iterable, Mapping
 
 import dash
 from dash import html, dcc
@@ -151,6 +152,134 @@ def load_region_labels(config_path) -> dict[str, str]:
     return {k: v.get("label", k) for k, v in cfg.get("regions", {}).items()}
 
 
+def region_display(region_labels: Mapping[str, str], key: str) -> str:
+    """Return the display label for a region key."""
+    return region_labels.get(key, key)
+
+
+def make_search_text(*parts) -> str:
+    """Build lowercased dropdown search text with no-space aliases."""
+    pieces = []
+    for part in parts:
+        if not part:
+            continue
+        text = str(part).lower()
+        pieces.append(text)
+        if " " in text:
+            pieces.append(text.replace(" ", ""))
+    return " ".join(pieces)
+
+
+def matches_query(search_text: str, query: str | None) -> bool:
+    """Token-AND match: every whitespace-separated query token must appear."""
+    if not query:
+        return True
+    return all(tok in search_text for tok in query.lower().split())
+
+
+_DROPDOWN_GRAY = {"color": "#999", "marginLeft": "0.5em"}
+_DROPDOWN_DISABLED_PRIMARY = {"color": "#aaa"}
+
+
+def dropdown_option_label(
+    primary: str,
+    suffix: str = "",
+    *,
+    disabled: bool = False,
+    disabled_suffix: str = "",
+):
+    primary_node = html.Span(primary, style=_DROPDOWN_DISABLED_PRIMARY) if disabled else primary
+    suffix_nodes = []
+    if suffix:
+        suffix_nodes.append(html.Span(suffix, style=_DROPDOWN_GRAY))
+    if disabled and disabled_suffix:
+        suffix_nodes.append(html.Span(disabled_suffix, style=_DROPDOWN_GRAY))
+    if not suffix_nodes and not disabled:
+        return primary
+    return html.Span([primary_node, *suffix_nodes])
+
+
+def active_glider_dropdown_options(
+    glider_ids: Iterable[str],
+    *,
+    search_value: str | None,
+    region_by_glider: Mapping[str, str],
+    region_labels: Mapping[str, str],
+    is_available: Callable[[str], bool],
+    include_no_data_suffix: bool = False,
+) -> list[dict]:
+    rows = []
+    for sn in glider_ids:
+        sn = str(sn)
+        region_key = region_by_glider.get(sn, "")
+        region_lbl = region_display(region_labels, region_key)
+        search_text = make_search_text(sn, f"spray {sn}", region_key, region_lbl)
+        if not matches_query(search_text, search_value):
+            continue
+        rows.append((not is_available(sn), sn, region_lbl, search_text))
+
+    rows.sort(key=lambda r: r[1])
+    sv = search_value or ""
+    return [
+        {
+            "label": dropdown_option_label(
+                f"Spray {sn}",
+                f" {region_lbl}" if region_lbl else "",
+                disabled=disabled,
+                disabled_suffix=" (no data)" if include_no_data_suffix else "",
+            ),
+            "value": sn,
+            "disabled": disabled,
+            "search": f"{search_text} {sv}",
+        }
+        for disabled, sn, region_lbl, search_text in rows
+    ]
+
+
+def mission_dropdown_options(
+    mission_ids: Iterable[str],
+    *,
+    search_value: str | None,
+    mission_meta: Mapping[str, Mapping],
+    region_labels: Mapping[str, str],
+    is_available: Callable[[str], bool],
+    date_label: Callable[[str, Mapping], str] | None = None,
+    extra_search: Callable[[str, Mapping], Iterable[str]] | None = None,
+    include_no_data_suffix: bool = False,
+) -> list[dict]:
+    rows = []
+    for mission_id in mission_ids:
+        mission_id = str(mission_id)
+        meta = mission_meta.get(mission_id, {})
+        region_key = meta.get("region", "")
+        region_lbl = region_display(region_labels, region_key)
+        date_text = date_label(mission_id, meta) if date_label else ""
+        extra = list(extra_search(mission_id, meta)) if extra_search else []
+        search_text = make_search_text(mission_id, region_key, region_lbl, date_text, *extra)
+        if not matches_query(search_text, search_value):
+            continue
+        disabled = not is_available(mission_id)
+        detail = " - ".join(part for part in (region_lbl, date_text) if part)
+        rows.append((disabled, mission_id, detail, search_text))
+
+    rows.sort(key=lambda r: r[1])
+    sv = search_value or ""
+    return [
+        {
+            "label": dropdown_option_label(
+                mission_id,
+                f" {detail}" if detail else "",
+                disabled=disabled,
+                disabled_suffix=" (no data)" if include_no_data_suffix else "",
+            ),
+            "value": mission_id,
+            "disabled": disabled,
+            "search": f"{search_text} {sv}",
+        }
+        for disabled, mission_id, detail, search_text in rows
+    ]
+
+
 def load_map_region_config(config_path, active_regions=None):
     """
     Load map config from a YAML file (map_config.yml).
@@ -253,6 +382,84 @@ def section_chart_specs(variables, variable_names=None) -> list[tuple[str, str]]
     """
     keys = ["map", "TS", *(variables or [])]
     return [(key, chart_header(key, variable_names)) for key in keys]
+
+
+def _section_sort_key(section):
+    try:
+        return (0, int(section))
+    except (TypeError, ValueError):
+        return (1, str(section))
+
+
+def section_opacity_by_section(sections, min_opacity: float = 0.2) -> dict:
+    ordered_sections = sorted(
+        {section for section in sections if pd.notna(section)},
+        key=_section_sort_key,
+    )
+    if not ordered_sections:
+        return {}
+    opacities = np.linspace(min_opacity, 1, len(ordered_sections)) if len(ordered_sections) > 1 else [1.0]
+    return {
+        section: float(opacity)
+        for section, opacity in zip(ordered_sections, opacities)
+    }
+
+
+def section_plot_details(
+    *,
+    source: str,
+    identifier: str,
+    section_num,
+    chart_specs: list[tuple[str, str]],
+):
+    if source == "realtime":
+        mission_url = "https://gliders.whoi.edu/data/realtime/{:04d}.html".format(int(identifier))
+        plot_url = "https://gliders.whoi.edu/data/figs/realtime/{SN:04d}/{KEY}_{SECTION}.png"
+
+        def chart_url(key):
+            return plot_url.format(SN=int(identifier), KEY=key, SECTION=section_num)
+
+    elif source == "archive":
+        mission_url = f"https://gliders.whoi.edu/data/archive/{identifier}.html"
+        plot_url = "https://gliders.whoi.edu/data/figs/archive/{MISSION}/{KEY}_{SECTION}.png"
+
+        def chart_url(key):
+            return plot_url.format(MISSION=identifier, KEY=key, SECTION=section_num)
+
+    else:
+        raise ValueError(f"unknown section plot source: {source!r}")
+
+    mission_link = html.Div(
+        [
+            html.A("All plots for this mission", href=mission_url, target="_blank"),
+        ],
+        style={"margin-bottom": "30px"},
+    )
+
+    if section_num is None:
+        return html.Div([mission_link, "Select a section to see plots."])
+
+    def img_block(series, header):
+        url = chart_url(series)
+        return html.Div(
+            [
+                html.H4(header),
+                html.A(
+                    html.Img(src=url, style={"width": "100%", "max-width": "300px", "margin-top": "10px"}),
+                    href=url,
+                    target="_blank",
+                ),
+            ],
+            style={"margin-bottom": "20px"},
+        )
+
+    return html.Div(
+        [
+            mission_link,
+            html.H3(f"Section {section_num} Plots"),
+            *[img_block(key, header) for key, header in chart_specs],
+        ]
+    )
 
 
 def latlon_offset(lat, lon, v_dy, u_dx, scale=1):

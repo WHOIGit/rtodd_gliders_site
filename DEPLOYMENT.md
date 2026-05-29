@@ -141,7 +141,13 @@ sudo apache2ctl configtest
 sudo systemctl reload apache2
 ```
 
-Required Apache modules include `ssl`, `headers`, `rewrite`, `proxy`, and `proxy_http`. Enable any missing modules with `sudo a2enmod <module>`, then run `sudo apache2ctl configtest` and reload Apache.
+Required Apache modules include `ssl`, `headers`, `rewrite`, `proxy`, and `proxy_http`. Enable them before enabling or reloading the vhosts:
+
+```sh
+sudo a2enmod ssl headers rewrite proxy proxy_http
+sudo apache2ctl configtest
+sudo systemctl reload apache2
+```
 
 TLS uses the Let's Encrypt lineage at `/etc/letsencrypt/live/gliders.whoi.edu/`. The certificate must cover both `gliders.whoi.edu` and `analytics.gliders.whoi.edu`.
 

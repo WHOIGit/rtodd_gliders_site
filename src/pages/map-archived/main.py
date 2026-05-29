@@ -13,7 +13,16 @@ import numpy as np
 import pandas as pd
 
 from data_loader import DEFAULT_DATA_DIR, GliderDataLoader, get_gdl, parse_mission_yyyymmm
-from utils import latlon_offset, load_map_region_config, load_region_labels, section_chart_specs
+from utils import (
+    latlon_offset,
+    load_map_region_config,
+    load_region_labels,
+    mission_dropdown_options,
+    region_display,
+    section_chart_specs,
+    section_opacity_by_section,
+    section_plot_details,
+)
 from .layout import layout, TILE_URL
 from .names import MapIds, StoreIds, ControlIds, ContainerIds, TextIds, IntervalIds
 
@@ -31,25 +40,7 @@ _REGION_LABELS = load_region_labels(Path("config/map_config.yml").resolve())
 
 
 def _region_display(key: str) -> str:
-    return _REGION_LABELS.get(key, key)
-
-
-def _make_search_text(*parts):
-    pieces = []
-    for p in parts:
-        if not p:
-            continue
-        s = str(p).lower()
-        pieces.append(s)
-        if " " in s:
-            pieces.append(s.replace(" ", ""))
-    return " ".join(pieces)
-
-
-def _matches_query(search_text, query):
-    if not query:
-        return True
-    return all(tok in search_text for tok in query.lower().split())
+    return region_display(_REGION_LABELS, key)
 
 
 def rgb_to_hex(r: int, g: int, b: int, a=None):
@@ -270,14 +261,10 @@ def _build_map_children(missions, year_range, uv_scale, uv_data, hidden=None):
         if df.empty:
             continue
 
-        section_values = sorted({int(s) for s in df["section"].dropna().unique()})
-        opacity_by_section = {
-            section: float(opacity)
-            for section, opacity in zip(
-                section_values,
-                np.linspace(0.25, 1, len(section_values)) if len(section_values) > 1 else [1.0],
-            )
-        }
+        opacity_by_section = section_opacity_by_section(
+            (int(s) for s in df["section"].dropna().unique()),
+            min_opacity=0.25,
+        )
 
         for section, df_sec in df.groupby("section", sort=False):
             positions = list(zip(df_sec["lat"].tolist(), df_sec["lon"].tolist()))
@@ -791,41 +778,16 @@ def _mission_dropdown_options(store_data, search_value):
     """
     store_data = store_data or {}
     missions = store_data.get("missions", {})
-    rows = []
-    for mission_id, mission in missions.items():
-        region_key = mission.get("region", "")
-        region_lbl = _region_display(region_key)
-        date_label = _mission_date_label(mission)
-        disabled = not mission.get("available")
-        search_text = _make_search_text(mission_id, region_key, region_lbl, date_label, mission.get("yymm"))
-        if not _matches_query(search_text, search_value):
-            continue
-        rows.append((disabled, mission_id, region_lbl, date_label, search_text))
-
-    rows.sort(key=lambda r: r[1])
-    sv = search_value or ""
-    gray = {"color": "#999", "marginLeft": "0.5em"}
-    disabled_style = {"color": "#aaa"}
-
-    def label(disabled, mission_id, region_lbl, date_label):
-        primary = html.Span(mission_id, style=disabled_style) if disabled else mission_id
-        suffix = []
-        detail = " - ".join(part for part in (region_lbl, date_label) if part)
-        if detail:
-            suffix.append(html.Span(f" {detail}", style=gray))
-        if disabled:
-            suffix.append(html.Span(" (no data)", style=gray))
-        return html.Span([primary, *suffix])
-
-    return [
-        {
-            "label": label(disabled, mission_id, region_lbl, date_label),
-            "value": mission_id,
-            "disabled": disabled,
-            "search": f"{search_text} {sv}",
-        }
-        for disabled, mission_id, region_lbl, date_label, search_text in rows
-    ]
+    return mission_dropdown_options(
+        missions.keys(),
+        search_value=search_value,
+        mission_meta=missions,
+        region_labels=_REGION_LABELS,
+        is_available=lambda mission_id: bool(missions.get(str(mission_id), {}).get("available")),
+        date_label=lambda _mission_id, mission: _mission_date_label(mission),
+        extra_search=lambda _mission_id, mission: [mission.get("yymm")],
+        include_no_data_suffix=True,
+    )
 
 
 @app.callback(
@@ -881,44 +843,15 @@ def populate_section_details(mission_id, section_num):
     if not mission_id:
         return "Select a mission to see details."
 
-    mission_url = f"https://gliders.whoi.edu/data/archive/{mission_id}.html"
-    url_pattern = "https://gliders.whoi.edu/data/figs/archive/{MISSION}/{KEY}_{SECTION}.png"
-
     # Charts are driven by the mission's variable list in archive.csv/archive2.csv
     # so plots the mission doesn't carry are never rendered (no broken images).
     gdl = get_gdl()
     chart_specs = section_chart_specs(gdl.section_variables(mission_id), gdl.variable_names)
-
-    mission_link = html.Div(
-        [
-            html.A("All plots for this mission", href=mission_url, target="_blank"),
-        ],
-        style={"margin-bottom": "30px"},
-    )
-
-    if section_num is None:
-        return html.Div([mission_link, "Select a section to see plots."])
-
-    def img_block(series, header):
-        url = url_pattern.format(MISSION=mission_id, KEY=series, SECTION=section_num)
-        return html.Div(
-            [
-                html.H4(header),
-                html.A(
-                    html.Img(src=url, style={"width": "100%", "max-width": "300px", "margin-top": "10px"}),
-                    href=url,
-                    target="_blank",
-                ),
-            ],
-            style={"margin-bottom": "20px"},
-        )
-
-    return html.Div(
-        [
-            mission_link,
-            html.H3(f"Section {section_num} Plots"),
-            *[img_block(key, header) for key, header in chart_specs],
-        ]
+    return section_plot_details(
+        source="archive",
+        identifier=mission_id,
+        section_num=section_num,
+        chart_specs=chart_specs,
     )
 
 

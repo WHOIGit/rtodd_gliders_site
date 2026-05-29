@@ -1,4 +1,5 @@
 # data_loader.py
+import csv
 import json
 import datetime as dt
 import os
@@ -59,6 +60,17 @@ def _safe_json_attr(obj, attr: str, default):
         return default
 
 
+def _iter_csv_rows(path: Path):
+    with path.open(newline="") as f:
+        for row_num, row in enumerate(csv.reader(f), start=1):
+            row = [field.strip() for field in row]
+            if not row or not any(row):
+                continue
+            if row[0].startswith("#"):
+                continue
+            yield row_num, row
+
+
 class GliderDataLoader:
     """Loads glider deployment data from data/netcdf/*.nc files."""
 
@@ -105,28 +117,25 @@ class GliderDataLoader:
         if not path.exists():
             logger.warning(f"{name} not found; skipping {spray_type} active gliders")
             return
-        with path.open() as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                parts = line.split(",")
-                if len(parts) < 4:
-                    continue
-                sn = parts[0].strip()
-                region = parts[1].strip()
-                try:
-                    active = int(parts[3])
-                except ValueError:
-                    continue
-                if active != 1:
-                    continue
-                self.active_sns.add(sn)
-                self.active_meta[sn] = {
-                    "region": region,
-                    "type": spray_type,
-                    "variables": [p.strip() for p in parts[4:] if p.strip()],
-                }
+        for row_num, parts in _iter_csv_rows(path):
+            if len(parts) < 4:
+                logger.warning(f"Skipping malformed {name}:{row_num}; expected at least 4 columns")
+                continue
+            sn = parts[0].strip()
+            region = parts[1].strip()
+            try:
+                active = int(parts[3])
+            except ValueError:
+                logger.warning(f"Skipping malformed {name}:{row_num}; active flag is not an integer")
+                continue
+            if active != 1:
+                continue
+            self.active_sns.add(sn)
+            self.active_meta[sn] = {
+                "region": region,
+                "type": spray_type,
+                "variables": [p.strip() for p in parts[4:] if p.strip()],
+            }
 
     def load_active1(self) -> None:
         self._load_active_csv("active.csv", "spray1")
@@ -145,25 +154,22 @@ class GliderDataLoader:
             logger.warning(f"{name} not found; {label or 'gliders'} will use a single (1, inf) section")
             return
         seen: set[str] = set()
-        with path.open() as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                parts = line.split(",")
-                if len(parts) < 3:
-                    continue
-                key = parts[0].strip()
-                if label == "archive1" and len(key) == 7 and key.isalnum():
-                    key = key.zfill(8)
-                try:
-                    start = int(parts[1])
-                    end_raw = parts[2].strip()
-                    end = float('inf') if end_raw.lower() == 'inf' else float(end_raw)
-                except ValueError:
-                    continue
-                target.setdefault(key, []).append((start, end))
-                seen.add(key)
+        for row_num, parts in _iter_csv_rows(path):
+            if len(parts) < 3:
+                logger.warning(f"Skipping malformed {name}:{row_num}; expected at least 3 columns")
+                continue
+            key = parts[0].strip()
+            if label == "archive1" and len(key) == 7 and key.isalnum():
+                key = key.zfill(8)
+            try:
+                start = int(parts[1])
+                end_raw = parts[2].strip()
+                end = float('inf') if end_raw.lower() == 'inf' else float(end_raw)
+            except ValueError:
+                logger.warning(f"Skipping malformed {name}:{row_num}; section range is invalid")
+                continue
+            target.setdefault(key, []).append((start, end))
+            seen.add(key)
 
         if expected_keys is not None:
             missing_in_sec = expected_keys - seen
@@ -191,23 +197,19 @@ class GliderDataLoader:
         if not path.exists():
             logger.warning(f"{name} not found; skipping {spray_type} archive missions")
             return
-        with path.open() as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                parts = line.split(",")
-                if len(parts) < 2:
-                    continue
-                mid = parts[0].strip()
-                if spray_type == "spray1" and len(mid) == 7 and mid.isalnum():
-                    mid = mid.zfill(8)
-                region = parts[1].strip()
-                self.archive_missions[mid] = {
-                    "region": region,
-                    "type": spray_type,
-                    "variables": [p.strip() for p in parts[3:] if p.strip()],
-                }
+        for row_num, parts in _iter_csv_rows(path):
+            if len(parts) < 2:
+                logger.warning(f"Skipping malformed {name}:{row_num}; expected at least 2 columns")
+                continue
+            mid = parts[0].strip()
+            if spray_type == "spray1" and len(mid) == 7 and mid.isalnum():
+                mid = mid.zfill(8)
+            region = parts[1].strip()
+            self.archive_missions[mid] = {
+                "region": region,
+                "type": spray_type,
+                "variables": [p.strip() for p in parts[3:] if p.strip()],
+            }
 
     def load_archive1(self) -> None:
         self._load_archive_csv("archive.csv", "spray1")
@@ -237,15 +239,14 @@ class GliderDataLoader:
         if not path.exists():
             logger.warning("variables.csv not found; variable display names unavailable")
             return
-        with path.open() as f:
-            for line in f:
-                parts = line.split(",")
-                if len(parts) < 2:
-                    continue
-                key = parts[0].strip()
-                name = parts[1].strip()
-                if key and name:
-                    self.variable_names[key] = name
+        for row_num, parts in _iter_csv_rows(path):
+            if len(parts) < 2:
+                logger.warning(f"Skipping malformed variables.csv:{row_num}; expected at least 2 columns")
+                continue
+            key = parts[0].strip()
+            name = parts[1].strip()
+            if key and name:
+                self.variable_names[key] = name
 
     def section_variables(self, key: str) -> list[str]:
         """Plot variable tokens for a glider SN or archive mission ID.
