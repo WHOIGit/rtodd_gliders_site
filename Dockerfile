@@ -23,11 +23,18 @@ RUN curl -fsSLo /tmp/pandoc.deb \
     && rm -f /tmp/pandoc.deb \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy application code and install the project from pyproject.toml
+# --- Dependency layer -------------------------------------------------------
+# Install only the third-party dependencies first.
 COPY pyproject.toml README.md /app/
+RUN mkdir -p /app/src/gliderapp \
+    && touch /app/src/gliderapp/__init__.py \
+    && pip install --no-cache-dir .
+
+# --- Application layer ------------------------------------------------------
+# Copy project source code and install the package itself with --no-deps
 COPY src/ /app/src/
 COPY bibtex/ /app/bibtex/
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir --no-deps --force-reinstall .
 
 # --no-control-socket: the container runs as a UID with no home directory
 # (see `user:` in compose.yml), so gunicorn's control socket would try to
