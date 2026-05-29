@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gliderapp"
-version = "0.1.0"
+version = "1.0.0"
 description = "Dash application for visualizing WHOI Spray autonomous underwater glider deployments."
 readme = "README.md"
 requires-python = ">=3.12"
