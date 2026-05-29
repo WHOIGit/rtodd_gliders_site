@@ -9,9 +9,9 @@ import dash
 import dash_bootstrap_components as dbc
 from flask import send_from_directory, abort
 
-from layout import create_layout, register_callbacks
-from names import *
-from utils import CONFIG_ASSETS_DIR, CONFIG_ASSETS_URL_PREFIX, PORTRAITS_DIR, PORTRAITS_URL_PREFIX
+from .layout import create_layout, register_callbacks
+from .names import *
+from .utils import CONFIG_ASSETS_DIR, CONFIG_ASSETS_URL_PREFIX, PORTRAITS_DIR, PORTRAITS_URL_PREFIX
 
 external_stylesheets = [dbc.themes.BOOTSTRAP,
     "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css",
@@ -37,7 +37,7 @@ if PROD_ENV:
     )
 
 app = dash.Dash(
-    __name__,
+    __package__,
     **dash_kwargs,
 )
 app.title = "Glider Dashboard"
