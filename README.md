@@ -43,7 +43,7 @@ Config files live in `config/` and are mounted into the container at runtime.
 For changes to take effect, run:
 
 ```bash
-docker compose up --force-recreate -d
+docker compose up gliderapp --force-recreate -d
 ```
 
 | File | Purpose |
@@ -127,6 +127,23 @@ The `bibtex/` directory contains a pipeline for converting a BibTeX bibliography
 
 ### Usage
 
+> [!TIP]
+> If on `racing` production server, after updating `bibtex/input/refs.bib`, run:
+> ```bahs
+> docker run --rm -v "$PWD:/work" -w /work gliderapp:latest update-publications
+> docker compuse up gliderapp -d --force-recreate
+> ```
+> Verify https://gliders.whoi.edu/publications
+>
+> Then commit changes to git
+> ```bash
+> git add bibtex/input/refs.bib config/publications.html
+> git commit -m "updated publications.html"
+> git push
+> ```
+
+Otherise, when project is installed locally, use the `update-publications` command.
+
 ```bash
 update-publications path/to/refs.bib -o output.html
 ```
@@ -134,6 +151,16 @@ update-publications path/to/refs.bib -o output.html
 This reads an input bibtex file, runs Pandoc with the AGU citation style, post-processes the generated HTML, and outputs a formatted html file.
 
 If used without arguments, it defaults to using `bibtex/input/refs.bib` and  `-o config/publications.html`.
+
+You can also run the shell script directly:
+
+```bash
+# Default script output: bibtex/output/publications.html
+./bibtex/bib2html.sh bibtex/input/refs.bib
+
+# Write directly to the app config
+./bibtex/bib2html.sh bibtex/input/refs.bib config/publications.html
+```
 
 The Docker image also includes Pandoc 2.9.2.1 and the BibTeX tooling:
 
@@ -179,7 +206,7 @@ bibtex/
 1. Edit `bibtex/input/refs.bib` (add/remove BibTeX entries)
 2. Run `update-publications`
 3. Deploy and verify
-   - `docker compose up --force-recreate -d`
+   - `docker compose up gliderapp --force-recreate -d`
    - `https://gliders.whoi.edu/publications`
 4. Commit changes to git
    - `git add bibtex/input/refs.bib config/publications.html`
@@ -187,3 +214,58 @@ bibtex/
    - `git push`
 
 ## Updating Configs
+
+Config files live in `config/` and are mounted into the container at runtime.
+After editing them on the production host, deploy and verify the running site, then commit the change to git. 
+
+This order matters: do not leave verified production content as uncommitted local state on `racing`.
+
+### Static Pages
+
+The home and data pages are HTML fragments:
+
+- `config/homepage.html` -> `https://gliders.whoi.edu/`
+- `config/datapage.html` -> `https://gliders.whoi.edu/datapage`
+
+Example update:
+
+1. Edit `config/homepage.html` or `config/datapage.html`
+2. Deploy and verify
+   - `docker compose up gliderapp --force-recreate -d`
+   - Visit the page you changed
+3. Commit changes to git
+   - `git add config/____page.html`
+   - `git commit -m "updated page content"`
+   - `git push`
+
+### People Page
+
+Team members are defined in `config/people.yml`. 
+Portrait images live in `config/assets/people-imgs/`, 
+and the `image` field in `people.yml` should be just the filename, not a path.
+
+Example `current_members` entry:
+
+```yaml
+  - name: Jane Scientist
+    role: Research Associate
+    image: jane-scientist.jpg
+    blurb: Works on Spray glider operations and data products.
+    email: jscientist@whoi.edu
+    website: https://example.whoi.edu
+```
+
+Example update:
+
+1. Add or edit the person in `config/people.yml`
+2. Add their image file to `config/assets/people-imgs/`
+   - Example: `config/assets/people-imgs/jane-scientist.jpg`
+3. Deploy and verify
+   - `docker compose up gliderapp --force-recreate -d`
+   - Visit `https://gliders.whoi.edu/people`
+4. Commit changes to git
+   - `git add config/people.yml config/assets/people-imgs/jane-scientist.jpg`
+   - `git commit -m "update people page"`
+   - `git push`
+
+If a person has no portrait, leave `image:` blank and the app will use the configured default portrait.

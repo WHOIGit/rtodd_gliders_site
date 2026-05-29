@@ -1,24 +1,10 @@
 services:
-  data-watcher:
+
+  gliderapp:
     image: gliderapp:latest
     build: &gliderapp-build
       context: .
       dockerfile: Dockerfile
-    command: ["run-datawatcher"]
-    user: "168998:168997"          # gliderapp service account
-    volumes:
-      - /srv/data/sync:/app/data/sync:ro
-      - /srv/data/netcdf:/app/data/netcdf:rw
-    restart: unless-stopped
-    env_file:
-      - path: prod.env
-        required: true
-    environment:
-      - PYTHONUNBUFFERED=1
-
-  gliderapp:
-    image: gliderapp:latest
-    build: *gliderapp-build
     container_name: gliderapp
     user: "168998:168997"          # gliderapp service account
     ports:
@@ -40,6 +26,21 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+
+  data-watcher:
+    image: gliderapp:latest
+    build: *gliderapp-build
+    command: ["run-datawatcher"]
+    user: "168998:168997"          # gliderapp service account
+    volumes:
+      - /srv/data/sync:/app/data/sync:ro
+      - /srv/data/netcdf:/app/data/netcdf:rw
+    restart: unless-stopped
+    env_file:
+      - path: prod.env
+        required: true
+    environment:
+      - PYTHONUNBUFFERED=1
 
   goatcounter:
     image: arp242/goatcounter:2.7.0
