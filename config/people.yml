@@ -8,7 +8,7 @@ current_members:
 
   - name: Patrick Deane
     role: Engineer II
-    image:
+    image: pdeane_202605_fish.jpg
     blurb:
     email: pdeane@whoi.edu
     website:
@@ -22,7 +22,7 @@ current_members:
 
   - name: Sidney Batchelder
     role: Information Systems Associate III
-    image:
+    image: sidney.png
     blurb: Website Design and Maintenance
     email: sbatchelder@whoi.edu
     website: 
