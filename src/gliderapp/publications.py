@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Sequence
 
 
-DEFAULT_BIB = Path("bibtex/input/refs.bib")
+DEFAULT_BIB = Path("bibtex/input/whoi_spray_refs.bib")
 DEFAULT_OUTPUT = Path("config/publications.html")
 DEFAULT_SCRIPT = Path("bibtex/bib2html.sh")
 

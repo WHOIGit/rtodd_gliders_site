@@ -108,8 +108,8 @@ Useful installed commands:
 ```bash
 run-devserver                         # local Dash server
 run-datawatcher                       # poll DATA_DIR and maintain NETCDF_DIR
-update-publications                   # rebuild config/publications.html from bibtex/input/refs.bib
-update-publications refs.bib -o out.html
+update-publications                   # rebuild config/publications.html from bibtex/input/whoi_glider_refs.bib
+update-publications whoi_glider_refs.bib -o out.html
 ```
 
 ## Project Layout
@@ -136,7 +136,7 @@ The `bibtex/` directory contains a pipeline for converting a BibTeX bibliography
 ### Usage
 
 > [!TIP]
-> If on `racing` production server, after updating `bibtex/input/refs.bib`, run:
+> If on `racing` production server, after updating `bibtex/input/whoi_glider_refs.bib`, run:
 > ```bahs
 > docker run --rm -v "$PWD:/work" -w /work gliderapp:latest update-publications
 > docker compuse up gliderapp -d --force-recreate
@@ -145,7 +145,7 @@ The `bibtex/` directory contains a pipeline for converting a BibTeX bibliography
 >
 > Then commit changes to git
 > ```bash
-> git add bibtex/input/refs.bib config/publications.html
+> git add bibtex/input/whoi_glider_refs.bib config/publications.html
 > git commit -m "updated publications.html"
 > git push
 > ```
@@ -153,21 +153,21 @@ The `bibtex/` directory contains a pipeline for converting a BibTeX bibliography
 Otherise, when project is installed locally, use the `update-publications` command.
 
 ```bash
-update-publications path/to/refs.bib -o output.html
+update-publications path/to/whoi_glider_refs.bib -o output.html
 ```
 
 This reads an input bibtex file, runs Pandoc with the AGU citation style, post-processes the generated HTML, and outputs a formatted html file.
 
-If used without arguments, it defaults to using `bibtex/input/refs.bib` and  `-o config/publications.html`.
+If used without arguments, it defaults to using `bibtex/input/whoi_glider_refs.bib` and  `-o config/publications.html`.
 
 You can also run the shell script directly:
 
 ```bash
 # Default script output: bibtex/output/publications.html
-./bibtex/bib2html.sh bibtex/input/refs.bib
+./bibtex/bib2html.sh bibtex/input/whoi_glider_refs.bib
 
 # Write directly to the app config
-./bibtex/bib2html.sh bibtex/input/refs.bib config/publications.html
+./bibtex/bib2html.sh bibtex/input/whoi_glider_refs.bib config/publications.html
 ```
 
 The Docker image also includes Pandoc 2.9.2.1 and the BibTeX tooling:
@@ -180,7 +180,7 @@ docker compose build gliderapp
 docker run --rm -v "$PWD:/work" -w /work gliderapp:latest update-publications
 
 # Custom bibtex file to html file command
-docker run --rm -v "$PWD:/work" -w /work gliderapp:latest update-publications bibtex/input/refs.bib -o ./new-publications.html
+docker run --rm -v "$PWD:/work" -w /work gliderapp:latest update-publications bibtex/input/whoi_glider_refs.bib -o ./new-publications.html
 ```
 
 ### What it does
@@ -199,7 +199,7 @@ Internally, `update-publications` command runs `src/gliderapp/publications.py`, 
 ```
 bibtex/
 ├── input/
-│   ├── refs.bib              # Main bibliography
+│   ├── whoi_glider_refs.bib              # Main bibliography
 │   └── bold_authors.txt      # Authors to bold (one per line, exact match only, e.g. "Todd, R. E.")
 ├── output/
 │   └── publications.html     # Generated output
@@ -211,13 +211,13 @@ bibtex/
 
 ### Updating publications
 
-1. Edit `bibtex/input/refs.bib` (add/remove BibTeX entries)
+1. Edit `bibtex/input/whoi_glider_refs.bib` (add/remove BibTeX entries)
 2. Run `update-publications`
 3. Deploy and verify
    - `docker compose up gliderapp --force-recreate -d`
    - `https://gliders.whoi.edu/publications`
 4. Commit changes to git
-   - `git add bibtex/input/refs.bib config/publications.html`
+   - `git add bibtex/input/whoi_glider_refs.bib config/publications.html`
    - `git commit -m "updated publications.html"`
    - `git push`
 
